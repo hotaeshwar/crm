@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { LayoutDashboard, Users, FileText, Wallet, Menu, X } from 'lucide-react';
 import Dashboard from './components/Dashboard';
-import ClientManagement from './components/ClientManagement';
-import InvoiceManagement from './components/InvoiceManagement';
-import PaymentTracking from './components/PaymentTracking';
+import ClientManagement from './components/Clientmanagement';
+import InvoiceManagement from './components/Invoicemanagement';
+import PaymentTracking from './components/Paymenttracking';
 
 function App() {
   const [activeTab, setActiveTab] = useState('dashboard');
