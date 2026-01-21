@@ -6,7 +6,8 @@ import InvoiceManagement from './components/Invoicemanagement';
 import PaymentTracking from './components/Paymenttracking';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('dashboard');
+  // Change 'dashboard' to 'clients' to show Client Management by default
+  const [activeTab, setActiveTab] = useState('clients');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const tabs = [

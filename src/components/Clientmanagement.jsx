@@ -17,7 +17,8 @@ import {
   AlertCircle,
   Shield,
   Sparkles,
-  Briefcase
+  Briefcase,
+  ArrowLeft
 } from 'lucide-react';
 
 export default function ClientManagement() {
@@ -33,15 +34,19 @@ export default function ClientManagement() {
   const [loginPassword, setLoginPassword] = useState('');
   const [isLogin, setIsLogin] = useState(true);
   const [authError, setAuthError] = useState('');
-
-  console.log('Auth state:', {
-    user: user?.email,
-    userId: user?.uid
-  });
+  
+  // Reset password state
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetStep, setResetStep] = useState(1); // 1: request token, 2: enter new password
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState('');
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('Auth changed:', currentUser?.email);
       setUser(currentUser);
       setLoading(false);
       
@@ -56,11 +61,9 @@ export default function ClientManagement() {
     const unsubscribe = onSnapshot(
       collection(db, 'clients'),
       (snapshot) => {
-        console.log('Got clients:', snapshot.docs.length);
         setClients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       },
       (error) => {
-        console.error('Fetch error:', error);
         setError(error.message);
       }
     );
@@ -73,14 +76,11 @@ export default function ClientManagement() {
     
     try {
       if (isLogin) {
-        console.log('Logging in with:', loginEmail);
         await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
       } else {
-        console.log('Signing up with:', loginEmail);
         await createUserWithEmailAndPassword(auth, loginEmail, loginPassword);
       }
     } catch (error) {
-      console.error('Auth error:', error);
       setAuthError(error.message);
     }
   };
@@ -93,8 +93,6 @@ export default function ClientManagement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
-    
-    console.log('Submitting client:', form);
 
     try {
       const clientData = {
@@ -117,7 +115,6 @@ export default function ClientManagement() {
       
       setForm({ name: '', email: '', phone: '', company: '', services: '' });
     } catch (error) {
-      console.error('Save error:', error);
       setError(error.message);
     }
   };
@@ -148,99 +145,355 @@ export default function ClientManagement() {
     setForm({ name: '', email: '', phone: '', company: '', services: '' });
   };
 
-  // Show login form if not authenticated
+  // Reset password handlers
+  const handleRequestResetToken = async (e) => {
+    e.preventDefault();
+    setResetLoading(true);
+    setResetMessage('');
+    
+    try {
+      // Simulate API call - replace with your actual API endpoint
+      // const response = await fetch('YOUR_API/password-reset-request', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ username: resetEmail })
+      // });
+      // const data = await response.json();
+      
+      // For demonstration, simulate success with a mock token
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      const mockToken = 'RESET-' + Math.random().toString(36).substring(2, 10).toUpperCase();
+      
+      setResetToken(mockToken);
+      setResetMessage(`Your reset token is: ${mockToken}\n\nPlease save this token and use it to reset your password.`);
+      setResetStep(2);
+    } catch (error) {
+      setResetMessage('Failed to send reset token. Please try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    setResetMessage('');
+    
+    if (newPassword !== confirmPassword) {
+      setResetMessage('Passwords do not match!');
+      return;
+    }
+    
+    if (newPassword.length < 6) {
+      setResetMessage('Password must be at least 6 characters long.');
+      return;
+    }
+    
+    setResetLoading(true);
+    
+    try {
+      // Simulate API call - replace with your actual API endpoint
+      // const response = await fetch('YOUR_API/password-reset', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json' },
+      //   body: JSON.stringify({ 
+      //     username: resetEmail,
+      //     reset_token: resetToken,
+      //     new_password: newPassword
+      //   })
+      // });
+      
+      // For demonstration, simulate success
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      setResetMessage('Password reset successfully! You can now log in with your new password.');
+      
+      // Reset form and go back to login after 2 seconds
+      setTimeout(() => {
+        setShowResetPassword(false);
+        setResetStep(1);
+        setResetEmail('');
+        setResetToken('');
+        setNewPassword('');
+        setConfirmPassword('');
+        setResetMessage('');
+      }, 2000);
+      
+    } catch (error) {
+      setResetMessage('Failed to reset password. Please check your token and try again.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const backToLogin = () => {
+    setShowResetPassword(false);
+    setResetStep(1);
+    setResetEmail('');
+    setResetToken('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setResetMessage('');
+  };
+
+  // Show login/reset form if not authenticated
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 p-4 sm:p-6">
         <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-2xl w-full max-w-md border border-gray-100">
-          <div className="flex flex-col items-center mb-6">
-            <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-full mb-4 shadow-lg">
-              <Shield className="w-8 h-8 text-white" />
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center">
-              {isLogin ? 'Welcome Back' : 'Create Account'}
-            </h2>
-            <p className="text-gray-500 text-sm mt-2">
-              {isLogin ? 'Sign in to manage your clients' : 'Join us to get started'}
-            </p>
-          </div>
-          
-          {authError && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-              <span className="text-sm">{authError}</span>
-            </div>
+          {!showResetPassword ? (
+            // Login Form
+            <>
+              <div className="flex flex-col items-center mb-6">
+                <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-full mb-4 shadow-lg">
+                  <Shield className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center">
+                  {isLogin ? 'Welcome Back' : 'Create Account'}
+                </h2>
+                <p className="text-gray-500 text-sm mt-2">
+                  {isLogin ? 'Sign in to manage your clients' : 'Join us to get started'}
+                </p>
+              </div>
+              
+              {authError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-4 flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                  <span className="text-sm">{authError}</span>
+                </div>
+              )}
+              
+              <form onSubmit={handleAuthSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-gray-700 text-sm font-semibold mb-2">
+                    Email Address
+                  </label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                      placeholder="your@email.com"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <label className="block text-gray-700 text-sm font-semibold mb-2">
+                    Password
+                  </label>
+                  <div className="relative">
+                    <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                    <input
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center text-sm text-gray-600">
+                    <input type="checkbox" className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 mr-2" />
+                    Remember me
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(true)}
+                    className="text-sm text-blue-600 hover:text-blue-700 font-medium hover:underline"
+                  >
+                    Forgot password?
+                  </button>
+                </div>
+                
+                <button
+                  type="submit"
+                  className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2"
+                >
+                  <Sparkles className="w-5 h-5" />
+                  {isLogin ? 'Sign In' : 'Create Account'}
+                </button>
+              </form>
+              
+              <p className="mt-6 text-center text-gray-600">
+                {isLogin ? "Don't have an account? " : "Already have an account? "}
+                <button
+                  onClick={() => setIsLogin(!isLogin)}
+                  className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
+                >
+                  {isLogin ? 'Sign Up' : 'Sign In'}
+                </button>
+              </p>
+            </>
+          ) : (
+            // Reset Password Form
+            <>
+              <button
+                onClick={backToLogin}
+                className="flex items-center text-blue-600 hover:text-blue-700 mb-6 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Login
+              </button>
+              
+              <div className="flex flex-col items-center mb-6">
+                <div className="bg-gradient-to-br from-purple-500 to-pink-600 p-4 rounded-full mb-4 shadow-lg">
+                  <Shield className="w-8 h-8 text-white" />
+                </div>
+                <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 text-center">
+                  Reset Password
+                </h2>
+                <p className="text-gray-500 text-sm mt-2 text-center">
+                  {resetStep === 1 ? 'Enter your email to receive a reset token' : 'Enter your reset token and new password'}
+                </p>
+              </div>
+              
+              {resetMessage && (
+                <div className={`px-4 py-3 rounded-lg mb-4 ${
+                  resetMessage.includes('reset token is') || resetMessage.includes('success')
+                    ? 'bg-green-50 border border-green-200 text-green-700'
+                    : 'bg-red-50 border border-red-200 text-red-700'
+                }`}>
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+                    <div className="flex-1">
+                      <pre className="text-sm whitespace-pre-wrap font-sans">{resetMessage}</pre>
+                      {resetMessage.includes('reset token is') && (
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(resetToken);
+                            alert('Token copied to clipboard!');
+                          }}
+                          className="mt-3 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          </svg>
+                          Copy Token
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+              
+              {resetStep === 1 ? (
+                <form onSubmit={handleRequestResetToken} className="space-y-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-semibold mb-2">
+                      Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="email"
+                        value={resetEmail}
+                        onChange={(e) => setResetEmail(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                        placeholder="your@email.com"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-600 text-white py-3 rounded-lg hover:from-purple-600 hover:to-pink-700 font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {resetLoading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Mail className="w-5 h-5" />
+                        Send Reset Token
+                      </>
+                    )}
+                  </button>
+                </form>
+              ) : (
+                <form onSubmit={handleResetPassword} className="space-y-4">
+                  <div>
+                    <label className="block text-gray-700 text-sm font-semibold mb-2">
+                      Reset Token
+                    </label>
+                    <div className="relative">
+                      <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="text"
+                        value={resetToken}
+                        onChange={(e) => setResetToken(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition font-mono text-sm"
+                        placeholder="Enter reset token"
+                        required
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">Use the token displayed above</p>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-gray-700 text-sm font-semibold mb-2">
+                      New Password
+                    </label>
+                    <div className="relative">
+                      <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                        placeholder="••••••••"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-gray-700 text-sm font-semibold mb-2">
+                      Confirm Password
+                    </label>
+                    <div className="relative">
+                      <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                      <input
+                        type="password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                        placeholder="••••••••"
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full bg-gradient-to-r from-purple-500 to-pink-600 text-white py-3 rounded-lg hover:from-purple-600 hover:to-pink-700 font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {resetLoading ? (
+                      <>
+                        <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        Resetting...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-5 h-5" />
+                        Reset Password
+                      </>
+                    )}
+                  </button>
+                </form>
+              )}
+            </>
           )}
-          
-          <form onSubmit={handleAuthSubmit} className="space-y-4">
-            <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                  placeholder="your@email.com"
-                  required
-                />
-              </div>
-            </div>
-            
-            <div>
-              <label className="block text-gray-700 text-sm font-semibold mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Shield className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                  placeholder="••••••••"
-                  required
-                />
-              </div>
-            </div>
-            
-            <button
-              type="submit"
-              className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-600 hover:to-indigo-700 font-semibold shadow-lg hover:shadow-xl transition-all duration-200 flex items-center justify-center gap-2"
-            >
-              <Sparkles className="w-5 h-5" />
-              {isLogin ? 'Sign In' : 'Create Account'}
-            </button>
-          </form>
-          
-          <p className="mt-6 text-center text-gray-600">
-            {isLogin ? "Don't have an account? " : "Already have an account? "}
-            <button
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-blue-600 hover:text-blue-700 font-semibold hover:underline"
-            >
-              {isLogin ? 'Sign Up' : 'Sign In'}
-            </button>
-          </p>
-          
-          <div className="mt-6 p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-lg border border-gray-200">
-            <p className="font-semibold mb-2 text-gray-700 text-sm">Quick Test:</p>
-            <button
-              onClick={() => {
-                setLoginEmail('test@test.com');
-                setLoginPassword('123456');
-              }}
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium hover:underline"
-            >
-              Fill test credentials
-            </button>
-            <p className="mt-2 text-xs text-gray-500">
-              Note: Create this user if it doesn't exist
-            </p>
-          </div>
         </div>
       </div>
     );
@@ -269,7 +522,7 @@ export default function ClientManagement() {
               </div>
               <button
                 onClick={handleLogout}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 shadow-sm"
+                className="bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center gap-2 shadow-lg hover:shadow-xl"
               >
                 <LogOut className="w-4 h-4" />
                 Logout
