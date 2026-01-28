@@ -307,7 +307,12 @@ export default function InvoiceManagement() {
     yPos += 6;
     pdfDoc.text('marketing@buildingindiadigital.com', pageWidth / 2, yPos, { align: 'center' });
     yPos += 6;
-    pdfDoc.text('+91 8054481253', pageWidth / 2, yPos, { align: 'center' });
+    pdfDoc.setFontSize(9);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('For any enquiry, Call Us:', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
+    pdfDoc.setFontSize(10);
+    pdfDoc.text('+919041499964', pageWidth / 2, yPos, { align: 'center' });
     yPos += 15;
     
     // Invoice title
@@ -479,8 +484,8 @@ export default function InvoiceManagement() {
     pdfDoc.setFont(undefined, 'normal');
     
     pdfDoc.text('Thank you for your business!', leftMargin + contentWidth/2, footerY - 10, { align: 'center' });
-    pdfDoc.text('For any queries: marketing@buildingindiadigital.com | +91 8054481253', leftMargin + contentWidth/2, footerY - 3, { align: 'center' });
-    pdfDoc.text('Building India Digital © 2025', leftMargin + contentWidth/2, footerY + 4, { align: 'center' });
+    pdfDoc.text('For any queries: marketing@buildingindiadigital.com | +919041499964', leftMargin + contentWidth/2, footerY - 3, { align: 'center' });
+    pdfDoc.text('Building India Digital © 2026', leftMargin + contentWidth/2, footerY + 4, { align: 'center' });
     
     pdfDoc.save(`${invoice.invoiceNumber}.pdf`);
   };
@@ -512,7 +517,7 @@ export default function InvoiceManagement() {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {/* Client */}
+          {/* Client - Showing only company name */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
               <User className="w-4 h-4" />
@@ -526,7 +531,9 @@ export default function InvoiceManagement() {
             >
               <option value="">Select Client</option>
               {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.company || c.name}
+                </option>
               ))}
             </select>
           </div>
