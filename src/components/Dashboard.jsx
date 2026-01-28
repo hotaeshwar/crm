@@ -32,7 +32,7 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    // FIX: Use invoice.total (or subtotal/amount as fallback)
+    // Calculate total invoiced (all invoices)
     const totalInvoiced = invoices.reduce((sum, inv) => {
       const amount = inv.total || inv.subtotal || inv.amount || 0;
       return sum + amount;
@@ -40,11 +40,20 @@ export default function Dashboard() {
     
     const totalCollected = payments.reduce((sum, pay) => sum + (pay.amount || 0), 0);
     
+    // Calculate outstanding (only unpaid and partial invoices)
+    const outstanding = invoices.reduce((sum, inv) => {
+      if (inv.status === 'unpaid' || inv.status === 'partial') {
+        const amount = inv.total || inv.subtotal || inv.amount || 0;
+        return sum + amount;
+      }
+      return sum;
+    }, 0);
+    
     setStats({
       totalClients: clients.length,
       totalInvoiced,
       totalCollected,
-      outstanding: totalInvoiced - totalCollected
+      outstanding: outstanding
     });
   }, [clients, invoices, payments]);
 
