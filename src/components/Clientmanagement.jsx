@@ -23,7 +23,7 @@ import {
 
 export default function ClientManagement() {
   const [clients, setClients] = useState([]);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', company: '', services: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', company: '' });
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -113,7 +113,7 @@ export default function ClientManagement() {
         await addDoc(collection(db, 'clients'), clientData);
       }
       
-      setForm({ name: '', email: '', phone: '', company: '', services: '' });
+      setForm({ name: '', email: '', phone: '', company: '' });
     } catch (error) {
       setError(error.message);
     }
@@ -124,8 +124,7 @@ export default function ClientManagement() {
       name: client.name || '', 
       email: client.email || '', 
       phone: client.phone || '', 
-      company: client.company || '',
-      services: client.services || ''
+      company: client.company || ''
     });
     setEditId(client.id);
   };
@@ -142,7 +141,7 @@ export default function ClientManagement() {
 
   const cancelEdit = () => {
     setEditId(null);
-    setForm({ name: '', email: '', phone: '', company: '', services: '' });
+    setForm({ name: '', email: '', phone: '', company: '' });
   };
 
   // Reset password handlers
@@ -613,22 +612,6 @@ export default function ClientManagement() {
                 />
               </div>
             </div>
-            
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Services
-              </label>
-              <div className="relative">
-                <Briefcase className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input 
-                  type="text" 
-                  placeholder="Web Development, SEO, Marketing" 
-                  value={form.services}
-                  onChange={(e) => setForm({...form, services: e.target.value})}
-                  className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" 
-                />
-              </div>
-            </div>
           </div>
           
           <div className="flex flex-col sm:flex-row gap-3">
@@ -672,7 +655,6 @@ export default function ClientManagement() {
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Email</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Phone</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Company</th>
-                  <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Services</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Created By</th>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
                 </tr>
@@ -680,7 +662,7 @@ export default function ClientManagement() {
               <tbody className="divide-y divide-gray-200">
                 {clients.length === 0 ? (
                   <tr>
-                    <td colSpan="7" className="px-6 py-12 text-center text-gray-500">
+                    <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
                       <Users className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                       <p className="text-lg font-medium">No clients yet</p>
                       <p className="text-sm">Add your first client to get started</p>
@@ -700,20 +682,6 @@ export default function ClientManagement() {
                       <td className="px-6 py-4 text-gray-600">{client.email}</td>
                       <td className="px-6 py-4 text-gray-600">{client.phone || '—'}</td>
                       <td className="px-6 py-4 text-gray-600">{client.company || '—'}</td>
-                      <td className="px-6 py-4">
-                        {client.services ? (
-                          <div className="flex flex-wrap gap-1">
-                            {client.services.split(',').map((service, idx) => (
-                              <span key={idx} className="inline-flex items-center gap-1 px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full border border-purple-200">
-                                <Briefcase className="w-3 h-3" />
-                                {service.trim()}
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
                       <td className="px-6 py-4 text-sm text-gray-500">
                         {client.createdByEmail || client.createdBy || user.email}
                       </td>
@@ -774,18 +742,6 @@ export default function ClientManagement() {
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <Phone className="w-4 h-4 text-gray-400" />
                         <span>{client.phone}</span>
-                      </div>
-                    )}
-                    {client.services && (
-                      <div className="flex items-start gap-2">
-                        <Briefcase className="w-4 h-4 text-gray-400 mt-0.5" />
-                        <div className="flex flex-wrap gap-1">
-                          {client.services.split(',').map((service, idx) => (
-                            <span key={idx} className="inline-flex items-center px-2 py-1 bg-purple-50 text-purple-700 text-xs rounded-full border border-purple-200">
-                              {service.trim()}
-                            </span>
-                          ))}
-                        </div>
                       </div>
                     )}
                     <div className="flex items-center gap-2 text-xs text-gray-500">

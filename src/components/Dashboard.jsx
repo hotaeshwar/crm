@@ -32,19 +32,57 @@ export default function Dashboard() {
   }, []);
 
   useEffect(() => {
-    // FIX: Use invoice.total (or subtotal/amount as fallback)
+    // Calculate total invoiced (all invoices)
     const totalInvoiced = invoices.reduce((sum, inv) => {
       const amount = inv.total || inv.subtotal || inv.amount || 0;
       return sum + amount;
     }, 0);
     
-    const totalCollected = payments.reduce((sum, pay) => sum + (pay.amount || 0), 0);
+    // Calculate total collected
+    // Priority 1: Sum of amountReceived from invoices with status 'paid' or 'partial'
+    // Priority 2: Fall back to payments collection if needed
+    const collectedFromInvoices = invoices.reduce((sum, inv) => {
+      if (inv.status === 'paid') {
+        // For paid invoices, the full amount is collected
+        const amount = inv.total || inv.subtotal || inv.amount || 0;
+        return sum + amount;
+      } else if (inv.status === 'partial') {
+        // For partial invoices, use amountReceived
+        return sum + (inv.amountReceived || 0);
+      }
+      return sum;
+    }, 0);
+    
+    // Use collected from invoices, or fall back to payments collection
+    const totalCollected = collectedFromInvoices > 0 
+      ? collectedFromInvoices 
+      : payments.reduce((sum, pay) => sum + (pay.amount || 0), 0);
+    
+    // Calculate outstanding based on invoice status
+    const outstanding = invoices.reduce((sum, inv) => {
+      const totalAmount = inv.total || inv.subtotal || inv.amount || 0;
+      
+      if (inv.status === 'paid') {
+        // No outstanding for paid invoices
+        return sum;
+      } else if (inv.status === 'partial') {
+        // For partial: outstanding = total - amountReceived
+        // Use remainingAmount if available, otherwise calculate it
+        const remaining = inv.remainingAmount !== undefined 
+          ? inv.remainingAmount
+          : (totalAmount - (inv.amountReceived || 0));
+        return sum + remaining;
+      } else {
+        // For unpaid or any other status: full amount is outstanding
+        return sum + totalAmount;
+      }
+    }, 0);
     
     setStats({
       totalClients: clients.length,
       totalInvoiced,
       totalCollected,
-      outstanding: totalInvoiced - totalCollected
+      outstanding: Math.max(0, outstanding) // Ensure non-negative
     });
   }, [clients, invoices, payments]);
 
@@ -137,7 +175,7 @@ export default function Dashboard() {
           </p>
           <p className="text-xs text-purple-600 mt-2 flex items-center gap-1">
             <Wallet className="w-3 h-3" />
-            {payments.length} payments
+            {invoices.filter(inv => inv.status === 'paid' || inv.status === 'partial').length} paid/partial
           </p>
         </div>
 
@@ -155,7 +193,7 @@ export default function Dashboard() {
           </p>
           <p className="text-xs text-red-600 mt-2 flex items-center gap-1">
             <AlertCircle className="w-3 h-3" />
-            Pending payment
+            {invoices.filter(inv => inv.status === 'unpaid' || inv.status === 'partial').length} pending
           </p>
         </div>
       </div>

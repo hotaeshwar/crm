@@ -5,7 +5,7 @@ import jsPDF from 'jspdf';
 import { 
   FileText, Download, Edit2, Trash2, Save, X, 
   Plus, DollarSign, Calendar, User, Briefcase,
-  CheckCircle, Clock, AlertCircle, Receipt, ChevronDown, Tag
+  CheckCircle, Clock, AlertCircle, Receipt, Tag
 } from 'lucide-react';
 
 export default function InvoiceManagement() {
@@ -13,47 +13,35 @@ export default function InvoiceManagement() {
   const [clients, setClients] = useState([]);
   const [form, setForm] = useState({
     clientId: '', 
-    selectedServices: [], // Array of selected services with their amounts
-    service: '', // String for display
-    totalAmount: '', // Total calculated from all service amounts
-    tax: 0,
+    selectedServices: [],
     date: new Date().toISOString().split('T')[0], 
-    status: 'unpaid'
+    status: 'unpaid',
+    paymentDays: 30,
+    amountReceived: 0,
+    tax: 0
   });
 
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
   const [editForm, setEditForm] = useState({
-    service: '',
-    amount: '',
+    selectedServices: [],
     tax: 0,
-    status: 'unpaid'
+    status: 'unpaid',
+    paymentDays: 30,
+    amountReceived: 0
   });
 
-  const [showServiceDropdown, setShowServiceDropdown] = useState(false);
-  const [customService, setCustomService] = useState('');
-  const [availableServices, setAvailableServices] = useState([]);
+  // For adding services in edit mode
+  const [editServiceName, setEditServiceName] = useState('');
+  const [editServiceAmount, setEditServiceAmount] = useState('');
+
+  // For adding services in create mode
+  const [newServiceName, setNewServiceName] = useState('');
+  const [newServiceAmount, setNewServiceAmount] = useState('');
 
   useEffect(() => {
     const unsubClients = onSnapshot(collection(db, 'clients'), (s) => {
       const clientsData = s.docs.map(d => ({ id: d.id, ...d.data() }));
       setClients(clientsData);
-      
-      // Extract unique services from all clients
-      const servicesSet = new Set();
-      clientsData.forEach(client => {
-        if (client.services) {
-          // Split by comma and trim each service
-          const clientServices = client.services.split(',')
-            .map(service => service.trim())
-            .filter(service => service.length > 0);
-          
-          clientServices.forEach(service => servicesSet.add(service));
-        }
-      });
-      
-      // Convert Set to Array and sort alphabetically
-      const uniqueServices = Array.from(servicesSet).sort();
-      setAvailableServices(uniqueServices);
     });
     
     const unsubInvoices = onSnapshot(collection(db, 'invoices'), (s) => 
@@ -65,7 +53,6 @@ export default function InvoiceManagement() {
     };
   }, []);
 
-  // Calculate total amount from all services
   const calculateTotalAmount = (services) => {
     return services.reduce((total, service) => {
       const amount = parseFloat(service.amount) || 0;
@@ -75,32 +62,83 @@ export default function InvoiceManagement() {
 
   const handleEditClick = (invoice) => {
     setEditingInvoiceId(invoice.id);
+    
+    const services = invoice.selectedServices && invoice.selectedServices.length > 0
+      ? invoice.selectedServices
+      : (invoice.service ? invoice.service.split(',').map(s => ({
+          name: s.trim(),
+          amount: 0
+        })) : []);
+    
     setEditForm({
-      service: invoice.service || '',
-      amount: invoice.subtotal || invoice.amount || '',
+      selectedServices: services,
       tax: invoice.taxPercentage || 0,
-      status: invoice.status || 'unpaid'
+      status: invoice.status || 'unpaid',
+      paymentDays: invoice.paymentDays || 30,
+      amountReceived: invoice.amountReceived || 0
+    });
+    
+    setEditServiceName('');
+    setEditServiceAmount('');
+  };
+
+  const handleAddServiceInEdit = () => {
+    if (editServiceName.trim() && editServiceAmount) {
+      setEditForm({
+        ...editForm,
+        selectedServices: [
+          ...editForm.selectedServices,
+          { name: editServiceName.trim(), amount: editServiceAmount }
+        ]
+      });
+      setEditServiceName('');
+      setEditServiceAmount('');
+    }
+  };
+
+  const handleRemoveServiceInEdit = (index) => {
+    setEditForm({
+      ...editForm,
+      selectedServices: editForm.selectedServices.filter((_, i) => i !== index)
+    });
+  };
+
+  const handleUpdateServiceInEdit = (index, field, value) => {
+    const updatedServices = [...editForm.selectedServices];
+    updatedServices[index][field] = value;
+    setEditForm({
+      ...editForm,
+      selectedServices: updatedServices
     });
   };
 
   const handleSaveEdit = async (invoiceId) => {
     try {
-      const subtotal = parseFloat(editForm.amount) || 0;
+      const subtotal = calculateTotalAmount(editForm.selectedServices);
       const taxPercentage = parseFloat(editForm.tax) || 0;
       const taxAmount = (subtotal * taxPercentage) / 100;
       const total = subtotal + taxAmount;
+      const amountReceived = parseFloat(editForm.amountReceived) || 0;
+
+      const serviceString = editForm.selectedServices.map(s => s.name).join(', ');
 
       await updateDoc(doc(db, 'invoices', invoiceId), {
-        service: editForm.service,
+        service: serviceString,
+        selectedServices: editForm.selectedServices,
         subtotal: subtotal,
         taxPercentage: taxPercentage,
         taxAmount: taxAmount,
         total: total,
-        status: editForm.status
+        status: editForm.status,
+        paymentDays: parseInt(editForm.paymentDays) || 30,
+        amountReceived: amountReceived,
+        remainingAmount: total - amountReceived
       });
 
       setEditingInvoiceId(null);
-      setEditForm({ service: '', amount: '', tax: 0, status: 'unpaid' });
+      setEditForm({ selectedServices: [], tax: 0, status: 'unpaid', paymentDays: 30, amountReceived: 0 });
+      setEditServiceName('');
+      setEditServiceAmount('');
     } catch (error) {
       console.error('Error updating invoice:', error);
     }
@@ -108,21 +146,59 @@ export default function InvoiceManagement() {
 
   const handleCancelEdit = () => {
     setEditingInvoiceId(null);
-    setEditForm({ service: '', amount: '', tax: 0, status: 'unpaid' });
+    setEditForm({ selectedServices: [], tax: 0, status: 'unpaid', paymentDays: 30, amountReceived: 0 });
+    setEditServiceName('');
+    setEditServiceAmount('');
+  };
+
+  // Add service in create mode
+  const handleAddService = () => {
+    if (newServiceName.trim() && newServiceAmount) {
+      setForm({
+        ...form,
+        selectedServices: [
+          ...form.selectedServices,
+          { name: newServiceName.trim(), amount: newServiceAmount }
+        ]
+      });
+      setNewServiceName('');
+      setNewServiceAmount('');
+    }
+  };
+
+  // Remove service in create mode
+  const handleRemoveService = (index) => {
+    setForm({
+      ...form,
+      selectedServices: form.selectedServices.filter((_, i) => i !== index)
+    });
+  };
+
+  // Update service in create mode
+  const handleUpdateService = (index, field, value) => {
+    const updatedServices = [...form.selectedServices];
+    updatedServices[index][field] = value;
+    setForm({
+      ...form,
+      selectedServices: updatedServices
+    });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    const subtotal = parseFloat(form.totalAmount) || 0;
+    const subtotal = calculateTotalAmount(form.selectedServices);
     const taxPercentage = parseFloat(form.tax) || 0;
     const taxAmount = (subtotal * taxPercentage) / 100;
     const total = subtotal + taxAmount;
+    const amountReceived = parseFloat(form.amountReceived) || 0;
+    
+    const serviceString = form.selectedServices.map(s => s.name).join(', ');
     
     await addDoc(collection(db, 'invoices'), {
       clientId: form.clientId,
-      service: form.service,
-      selectedServices: form.selectedServices, // Store selected services with amounts
+      service: serviceString,
+      selectedServices: form.selectedServices,
       subtotal: subtotal,
       taxPercentage: taxPercentage,
       taxAmount: taxAmount,
@@ -130,19 +206,23 @@ export default function InvoiceManagement() {
       invoiceNumber: `INV-${Date.now()}`,
       date: form.date,
       status: form.status,
+      paymentDays: parseInt(form.paymentDays) || 30,
+      amountReceived: amountReceived,
+      remainingAmount: total - amountReceived,
       createdAt: new Date()
     });
     
     setForm({ 
       clientId: '', 
       selectedServices: [],
-      service: '',
-      totalAmount: '',
-      tax: 0,
       date: new Date().toISOString().split('T')[0], 
-      status: 'unpaid'
+      status: 'unpaid',
+      paymentDays: 30,
+      amountReceived: 0,
+      tax: 0
     });
-    setCustomService('');
+    setNewServiceName('');
+    setNewServiceAmount('');
   };
 
   const formatAmount = (amount) => {
@@ -175,83 +255,6 @@ export default function InvoiceManagement() {
       case 'unpaid': return 'bg-red-100 text-red-800 border-red-300';
       default: return 'bg-gray-100 text-gray-800 border-gray-300';
     }
-  };
-
-  const handleServiceSelect = (serviceName) => {
-    const isSelected = form.selectedServices.find(s => s.name === serviceName);
-    let newSelectedServices;
-    
-    if (isSelected) {
-      // Remove service if already selected
-      newSelectedServices = form.selectedServices.filter(s => s.name !== serviceName);
-    } else {
-      // Add service if not selected (with empty amount initially)
-      newSelectedServices = [...form.selectedServices, { 
-        name: serviceName, 
-        amount: '' 
-      }];
-    }
-    
-    const serviceNames = newSelectedServices.map(s => s.name).join(', ');
-    const totalAmount = calculateTotalAmount(newSelectedServices);
-    
-    setForm({
-      ...form,
-      selectedServices: newSelectedServices,
-      service: serviceNames,
-      totalAmount: totalAmount.toString()
-    });
-    
-    setShowServiceDropdown(false);
-  };
-
-  const handleCustomServiceAdd = () => {
-    if (customService.trim()) {
-      const newSelectedServices = [...form.selectedServices, { 
-        name: customService.trim(), 
-        amount: '' 
-      }];
-      const serviceNames = newSelectedServices.map(s => s.name).join(', ');
-      const totalAmount = calculateTotalAmount(newSelectedServices);
-      
-      setForm({
-        ...form,
-        selectedServices: newSelectedServices,
-        service: serviceNames,
-        totalAmount: totalAmount.toString()
-      });
-      
-      setCustomService('');
-      setShowServiceDropdown(false);
-    }
-  };
-
-  const updateServiceAmount = (index, newAmount) => {
-    const updatedServices = [...form.selectedServices];
-    updatedServices[index].amount = newAmount;
-    
-    const serviceNames = updatedServices.map(s => s.name).join(', ');
-    const totalAmount = calculateTotalAmount(updatedServices);
-    
-    setForm({
-      ...form,
-      selectedServices: updatedServices,
-      service: serviceNames,
-      totalAmount: totalAmount.toString()
-    });
-  };
-
-  const removeService = (index) => {
-    const updatedServices = form.selectedServices.filter((_, i) => i !== index);
-    const serviceNames = updatedServices.map(s => s.name).join(', ');
-    const totalAmount = calculateTotalAmount(updatedServices);
-    
-    setForm({
-      ...form,
-      selectedServices: updatedServices,
-      service: serviceNames,
-      totalAmount: totalAmount.toString()
-    });
   };
 
   const downloadPDF = async (invoice) => {
@@ -307,7 +310,12 @@ export default function InvoiceManagement() {
     yPos += 6;
     pdfDoc.text('marketing@buildingindiadigital.com', pageWidth / 2, yPos, { align: 'center' });
     yPos += 6;
-    pdfDoc.text('+91 8054481253', pageWidth / 2, yPos, { align: 'center' });
+    pdfDoc.setFontSize(9);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('For any enquiry, Call Us:', pageWidth / 2, yPos, { align: 'center' });
+    yPos += 6;
+    pdfDoc.setFontSize(10);
+    pdfDoc.text('+919041499964', pageWidth / 2, yPos, { align: 'center' });
     yPos += 15;
     
     // Invoice title
@@ -339,7 +347,8 @@ export default function InvoiceManagement() {
     pdfDoc.setFont(undefined, 'normal');
     pdfDoc.text(`Due Date:`, leftMargin, yPos + 21);
     const dueDate = new Date(invoice.date);
-    dueDate.setDate(dueDate.getDate() + 30);
+    const paymentDays = invoice.paymentDays || 30;
+    dueDate.setDate(dueDate.getDate() + paymentDays);
     pdfDoc.setFont(undefined, 'bold');
     pdfDoc.text(dueDate.toISOString().split('T')[0], leftMargin + 35, yPos + 21);
     pdfDoc.setFont(undefined, 'normal');
@@ -378,7 +387,6 @@ export default function InvoiceManagement() {
     // Items table WITH HEADER
     yPos += 45;
     
-    // Get services from invoice
     const services = invoice.selectedServices || 
                     (invoice.service ? invoice.service.split(',').map(s => ({
                       name: s.trim(),
@@ -408,7 +416,7 @@ export default function InvoiceManagement() {
     pdfDoc.line(leftMargin + 15, yPos - headerHeight, leftMargin + 15, yPos - headerHeight + totalTableHeight);
     pdfDoc.line(leftMargin + 100, yPos - headerHeight, leftMargin + 100, yPos - headerHeight + totalTableHeight);
     
-    // Add services with their individual amounts
+    // Add services
     pdfDoc.setTextColor(0, 0, 0);
     pdfDoc.setFontSize(9);
     pdfDoc.setFont(undefined, 'normal');
@@ -417,19 +425,15 @@ export default function InvoiceManagement() {
     let subtotal = 0;
     
     services.forEach((service, index) => {
-      // Serial number
       pdfDoc.text(`${index + 1}`, leftMargin + 7, serviceY + 6);
       
-      // Service description
       const serviceText = service.name.length > 35 ? service.name.substring(0, 32) + '...' : service.name;
       pdfDoc.text(serviceText, leftMargin + 18, serviceY + 6);
       
-      // Service amount
       const serviceAmount = parseFloat(service.amount) || 0;
       subtotal += serviceAmount;
       pdfDoc.text(formatAmountWithCurrency(serviceAmount), leftMargin + contentWidth - 5, serviceY + 6, { align: 'right' });
       
-      // Draw horizontal line between services
       if (index < services.length - 1) {
         pdfDoc.setDrawColor(200, 200, 200);
         pdfDoc.setLineWidth(0.2);
@@ -479,7 +483,7 @@ export default function InvoiceManagement() {
     pdfDoc.setFont(undefined, 'normal');
     
     pdfDoc.text('Thank you for your business!', leftMargin + contentWidth/2, footerY - 10, { align: 'center' });
-    pdfDoc.text('For any queries: marketing@buildingindiadigital.com | +91 8054481253', leftMargin + contentWidth/2, footerY - 3, { align: 'center' });
+    pdfDoc.text('For any queries: marketing@buildingindiadigital.com | +919041499964', leftMargin + contentWidth/2, footerY - 3, { align: 'center' });
     pdfDoc.text('Building India Digital © 2025', leftMargin + contentWidth/2, footerY + 4, { align: 'center' });
     
     pdfDoc.save(`${invoice.invoiceNumber}.pdf`);
@@ -526,116 +530,42 @@ export default function InvoiceManagement() {
             >
               <option value="">Select Client</option>
               {clients.map(c => (
-                <option key={c.id} value={c.id}>{c.name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.company || c.name}
+                </option>
               ))}
             </select>
           </div>
           
-          {/* Service Dropdown */}
+          {/* Date */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <Briefcase className="w-4 h-4" />
-              Select Services
+              <Calendar className="w-4 h-4" />
+              Date
             </label>
-            <div className="relative">
-              <div 
-                className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition flex items-center justify-between cursor-pointer"
-                onClick={() => setShowServiceDropdown(!showServiceDropdown)}
-              >
-                <span className={form.selectedServices.length > 0 ? "text-gray-900" : "text-gray-500"}>
-                  {form.selectedServices.length > 0 ? `${form.selectedServices.length} service(s) selected` : "Select services"}
-                </span>
-                <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${showServiceDropdown ? 'rotate-180' : ''}`} />
-              </div>
-              
-              {showServiceDropdown && (
-                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-y-auto">
-                  {availableServices.length > 0 ? (
-                    <>
-                      <div className="p-2 bg-gray-50 border-b">
-                        <div className="text-xs font-semibold text-gray-700 mb-1">Services from Clients</div>
-                        {availableServices.map((service, index) => {
-                          const isSelected = form.selectedServices.find(s => s.name === service);
-                          return (
-                            <div
-                              key={index}
-                              className={`px-3 py-2 hover:bg-blue-50 cursor-pointer flex items-center justify-between ${isSelected ? 'bg-blue-50' : ''}`}
-                              onClick={() => handleServiceSelect(service)}
-                            >
-                              <div className="flex items-center">
-                                <span className="text-sm text-gray-700">{service}</span>
-                                {isSelected && <CheckCircle className="w-3 h-3 text-blue-600 ml-2" />}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      
-                      <div className="border-t border-gray-200 p-2">
-                        <div className="text-xs text-gray-500 mb-1 px-2">Or enter custom service:</div>
-                        <div className="flex gap-1">
-                          <input
-                            type="text"
-                            value={customService}
-                            onChange={(e) => setCustomService(e.target.value)}
-                            className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                            placeholder="Enter custom service"
-                            onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleCustomServiceAdd())}
-                          />
-                          <button
-                            type="button"
-                            onClick={handleCustomServiceAdd}
-                            className="bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-200"
-                          >
-                            Add
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="p-3">
-                      <div className="text-sm text-gray-500 mb-2">No services found in clients. Add services in Client Management or enter custom services:</div>
-                      <div className="flex gap-1">
-                        <input
-                          type="text"
-                          value={customService}
-                          onChange={(e) => setCustomService(e.target.value)}
-                          className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                          placeholder="Enter custom service"
-                          onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleCustomServiceAdd())}
-                        />
-                        <button
-                          type="button"
-                          onClick={handleCustomServiceAdd}
-                          className="bg-blue-100 text-blue-600 px-3 py-1 rounded text-sm hover:bg-blue-200"
-                        >
-                          Add
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+            <input 
+              type="date" 
+              value={form.date}
+              onChange={(e) => setForm({...form, date: e.target.value})}
+              className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" 
+            />
           </div>
           
-          {/* Total Amount (Auto-calculated from individual services) */}
+          {/* Payment Days */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <DollarSign className="w-4 h-4" />
-              Total Amount (₹)
+              <Clock className="w-4 h-4" />
+              Payment Days
             </label>
-            <div className="relative">
-              <input 
-                type="number" 
-                value={form.totalAmount}
-                readOnly
-                className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-900 font-semibold"
-              />
-              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 text-sm text-gray-600">
-                Auto-calculated
-              </div>
-            </div>
+            <input 
+              type="number" 
+              placeholder="e.g., 30" 
+              value={form.paymentDays}
+              onChange={(e) => setForm({...form, paymentDays: e.target.value})}
+              className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+              min="1"
+            />
+            <p className="text-xs text-gray-500 mt-1">Days to receive full payment</p>
           </div>
           
           {/* Tax Percentage */}
@@ -655,20 +585,6 @@ export default function InvoiceManagement() {
             />
           </div>
           
-          {/* Date */}
-          <div className="relative">
-            <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
-              <Calendar className="w-4 h-4" />
-              Date
-            </label>
-            <input 
-              type="date" 
-              value={form.date}
-              onChange={(e) => setForm({...form, date: e.target.value})}
-              className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" 
-            />
-          </div>
-          
           {/* Status */}
           <div className="relative">
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -684,9 +600,73 @@ export default function InvoiceManagement() {
               <option value="partial">Partial</option>
             </select>
           </div>
+          
+          {/* Amount Received */}
+          {form.status === 'partial' && (
+            <div className="relative">
+              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+                <DollarSign className="w-4 h-4" />
+                Amount Received (₹)
+              </label>
+              <input 
+                type="number" 
+                placeholder="Enter received amount" 
+                value={form.amountReceived}
+                onChange={(e) => setForm({...form, amountReceived: e.target.value})}
+                className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-yellow-500 focus:border-transparent transition"
+                min="0"
+              />
+            </div>
+          )}
         </div>
         
-        {/* Selected Services List with Individual Amount Fields */}
+        {/* Add Service Section */}
+        <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+            <Briefcase className="w-4 h-4" />
+            Add Services
+          </h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Service Name</label>
+              <input
+                type="text"
+                value={newServiceName}
+                onChange={(e) => setNewServiceName(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., Website Development"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹)</label>
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  value={newServiceAmount}
+                  onChange={(e) => setNewServiceAmount(e.target.value)}
+                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Enter amount"
+                  min="0"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddService}
+                  disabled={!newServiceName.trim() || !newServiceAmount}
+                  className={`px-4 py-2 rounded-lg transition-all flex items-center gap-2 font-medium text-sm ${
+                    !newServiceName.trim() || !newServiceAmount
+                      ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                      : 'bg-blue-600 text-white hover:bg-blue-700'
+                  }`}
+                >
+                  <Plus className="w-4 h-4" />
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Selected Services List */}
         {form.selectedServices.length > 0 && (
           <div className="mt-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <h4 className="font-semibold text-gray-800 mb-3 flex items-center gap-2">
@@ -697,27 +677,34 @@ export default function InvoiceManagement() {
               {form.selectedServices.map((service, index) => (
                 <div key={index} className="bg-white p-3 rounded-lg border border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-800">{index + 1}. {service.name}</span>
+                    <div className="flex items-center gap-2 flex-1">
+                      <span className="text-sm font-medium text-gray-500">{index + 1}.</span>
+                      <input
+                        type="text"
+                        value={service.name}
+                        onChange={(e) => handleUpdateService(index, 'name', e.target.value)}
+                        className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm font-medium text-gray-800"
+                        placeholder="Service name"
+                      />
                     </div>
                     <button
                       type="button"
-                      onClick={() => removeService(index)}
-                      className="text-red-600 hover:text-red-800 p-1"
+                      onClick={() => handleRemoveService(index)}
+                      className="text-red-600 hover:text-red-800 p-1 ml-2"
                     >
-                      <X className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1">
-                      <label className="block text-xs text-gray-600 mb-1">Amount for this service (₹)</label>
+                      <label className="block text-xs text-gray-600 mb-1">Amount (₹)</label>
                       <input
                         type="number"
                         value={service.amount}
-                        onChange={(e) => updateServiceAmount(index, e.target.value)}
+                        onChange={(e) => handleUpdateService(index, 'amount', e.target.value)}
                         className="w-full border border-gray-300 rounded px-3 py-2 text-sm"
                         placeholder="Enter amount"
-                        required
+                        min="0"
                       />
                     </div>
                     <div className="mt-5">
@@ -734,10 +721,10 @@ export default function InvoiceManagement() {
                 <div className="flex items-center justify-between">
                   <div>
                     <span className="font-semibold text-gray-800">Services Total:</span>
-                    <p className="text-xs text-gray-600 mt-1">Sum of all individual service amounts</p>
+                    <p className="text-xs text-gray-600 mt-1">Sum of all service amounts</p>
                   </div>
                   <div className="text-right">
-                    <span className="text-lg font-bold text-gray-900">₹{formatAmount(form.totalAmount)}</span>
+                    <span className="text-lg font-bold text-gray-900">₹{formatAmount(calculateTotalAmount(form.selectedServices))}</span>
                     <p className="text-xs text-gray-600 mt-1">{form.selectedServices.length} service{form.selectedServices.length !== 1 ? 's' : ''}</p>
                   </div>
                 </div>
@@ -746,37 +733,45 @@ export default function InvoiceManagement() {
           </div>
         )}
         
-        {/* Preview - Only shown when total amount is > 0 */}
-        {form.totalAmount && parseFloat(form.totalAmount) > 0 && (
+        {/* Preview */}
+        {form.selectedServices.length > 0 && (
           <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
             <h4 className="font-bold text-gray-800 mb-3 flex items-center gap-2">
               <Receipt className="w-4 h-4" />
               Invoice Preview
             </h4>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-white p-3 rounded-lg shadow-sm">
                 <span className="text-xs text-gray-600 block mb-1">Subtotal</span>
-                <span className="text-lg font-bold text-gray-800">₹{formatAmount(form.totalAmount)}</span>
+                <span className="text-lg font-bold text-gray-800">₹{formatAmount(calculateTotalAmount(form.selectedServices))}</span>
               </div>
               <div className="bg-white p-3 rounded-lg shadow-sm">
-                <span className="text-xs text-gray-600 block mb-1">Tax ({form.tax}%)</span>
-                <span className="text-lg font-bold text-orange-600">₹{formatAmount((parseFloat(form.totalAmount) * parseFloat(form.tax)) / 100)}</span>
+                <span className="text-xs text-gray-600 block mb-1">Tax ({form.tax || 0}%)</span>
+                <span className="text-lg font-bold text-orange-600">₹{formatAmount((calculateTotalAmount(form.selectedServices) * parseFloat(form.tax || 0)) / 100)}</span>
               </div>
               <div className="bg-white p-3 rounded-lg shadow-sm">
                 <span className="text-xs text-gray-600 block mb-1">Total Amount</span>
                 <span className="text-lg font-bold text-green-600">
-                  ₹{formatAmount(parseFloat(form.totalAmount) + (parseFloat(form.totalAmount) * parseFloat(form.tax)) / 100)}
+                  ₹{formatAmount(calculateTotalAmount(form.selectedServices) + (calculateTotalAmount(form.selectedServices) * parseFloat(form.tax || 0)) / 100)}
                 </span>
               </div>
+              {form.status === 'partial' && form.amountReceived > 0 && (
+                <div className="bg-white p-3 rounded-lg shadow-sm border-2 border-yellow-300">
+                  <span className="text-xs text-gray-600 block mb-1">Remaining</span>
+                  <span className="text-lg font-bold text-yellow-600">
+                    ₹{formatAmount((calculateTotalAmount(form.selectedServices) + (calculateTotalAmount(form.selectedServices) * parseFloat(form.tax || 0)) / 100) - parseFloat(form.amountReceived))}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         )}
         
         <button 
           type="submit" 
-          disabled={!form.totalAmount || parseFloat(form.totalAmount) === 0 || !form.clientId}
+          disabled={form.selectedServices.length === 0 || !form.clientId}
           className={`mt-6 w-full sm:w-auto px-6 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg flex items-center justify-center gap-2 font-medium ${
-            !form.totalAmount || parseFloat(form.totalAmount) === 0 || !form.clientId
+            form.selectedServices.length === 0 || !form.clientId
               ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
               : 'bg-gradient-to-r from-blue-600 to-blue-700 text-white hover:from-blue-700 hover:to-blue-800'
           }`}
@@ -806,6 +801,7 @@ export default function InvoiceManagement() {
                 <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Subtotal</th>
                 <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Tax</th>
                 <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Total</th>
+                <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Payment Info</th>
                 <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</th>
                 <th className="p-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Actions</th>
               </tr>
@@ -813,7 +809,7 @@ export default function InvoiceManagement() {
             <tbody className="divide-y divide-gray-200">
               {invoices.length === 0 ? (
                 <tr>
-                  <td colSpan="8" className="p-8 text-center">
+                  <td colSpan="9" className="p-8 text-center">
                     <div className="flex flex-col items-center gap-3 text-gray-500">
                       <FileText className="w-12 h-12 text-gray-300" />
                       <p className="text-lg">No invoices found</p>
@@ -836,18 +832,63 @@ export default function InvoiceManagement() {
                         <span className="text-sm text-gray-900">{client?.name || 'N/A'}</span>
                       </td>
                       
-                      {/* Services Field with Individual Amounts */}
                       <td className="p-4">
                         {isEditing ? (
-                          <div className="space-y-2">
-                            <textarea
-                              value={editForm.service}
-                              onChange={(e) => setEditForm({...editForm, service: e.target.value})}
-                              className="w-full border border-gray-300 rounded px-2 py-1 text-sm"
-                              placeholder="Enter services (comma separated)"
-                              rows="3"
-                            />
-                            <p className="text-xs text-gray-500">Edit services</p>
+                          <div className="space-y-2 max-w-xs">
+                            {/* Add Service in Edit Mode */}
+                            <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                              <div className="text-xs font-semibold text-gray-700 mb-1">Add New Service:</div>
+                              <div className="flex gap-1 mb-2">
+                                <input
+                                  type="text"
+                                  value={editServiceName}
+                                  onChange={(e) => setEditServiceName(e.target.value)}
+                                  className="flex-1 border rounded px-2 py-1 text-xs"
+                                  placeholder="Service name"
+                                />
+                                <input
+                                  type="number"
+                                  value={editServiceAmount}
+                                  onChange={(e) => setEditServiceAmount(e.target.value)}
+                                  className="w-20 border rounded px-2 py-1 text-xs"
+                                  placeholder="Amount"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={handleAddServiceInEdit}
+                                  className="bg-blue-600 text-white px-2 rounded text-xs hover:bg-blue-700"
+                                >
+                                  <Plus className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                            
+                            {/* List of Services in Edit Mode */}
+                            <div className="space-y-1">
+                              {editForm.selectedServices.map((service, idx) => (
+                                <div key={idx} className="flex items-center gap-1 bg-white p-1 rounded border">
+                                  <input
+                                    type="text"
+                                    value={service.name}
+                                    onChange={(e) => handleUpdateServiceInEdit(idx, 'name', e.target.value)}
+                                    className="flex-1 border rounded px-2 py-1 text-xs"
+                                  />
+                                  <input
+                                    type="number"
+                                    value={service.amount}
+                                    onChange={(e) => handleUpdateServiceInEdit(idx, 'amount', e.target.value)}
+                                    className="w-20 border rounded px-2 py-1 text-xs"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveServiceInEdit(idx)}
+                                    className="text-red-600 p-1"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         ) : (
                           <div className="space-y-2">
@@ -869,17 +910,9 @@ export default function InvoiceManagement() {
                       </td>
                       
                       <td className="p-4">
-                        {isEditing ? (
-                          <input 
-                            type="number"
-                            value={editForm.amount}
-                            onChange={(e) => setEditForm({...editForm, amount: e.target.value})}
-                            className="border rounded px-2 py-1 w-28 text-sm"
-                            placeholder="Amount"
-                          />
-                        ) : (
-                          <span className="text-sm font-medium text-gray-900">{formatAmountWithCurrency(invoice.subtotal || invoice.amount)}</span>
-                        )}
+                        <span className="text-sm font-medium text-gray-900">
+                          {formatAmountWithCurrency(isEditing ? calculateTotalAmount(editForm.selectedServices) : (invoice.subtotal || invoice.amount))}
+                        </span>
                       </td>
                       
                       <td className="p-4">
@@ -895,9 +928,6 @@ export default function InvoiceManagement() {
                               max="100"
                               step="0.1"
                             />
-                            <div className="text-xs text-gray-500">
-                              ₹{formatAmount((parseFloat(editForm.amount || invoice.subtotal || invoice.amount) * parseFloat(editForm.tax)) / 100)}
-                            </div>
                           </div>
                         ) : (
                           <div className="text-sm">
@@ -911,12 +941,57 @@ export default function InvoiceManagement() {
                         {isEditing ? (
                           <span className="text-sm font-bold text-green-600">
                             ₹{formatAmount(
-                              parseFloat(editForm.amount || invoice.subtotal || invoice.amount) + 
-                              (parseFloat(editForm.amount || invoice.subtotal || invoice.amount) * parseFloat(editForm.tax)) / 100
+                              calculateTotalAmount(editForm.selectedServices) + 
+                              (calculateTotalAmount(editForm.selectedServices) * parseFloat(editForm.tax)) / 100
                             )}
                           </span>
                         ) : (
                           <span className="text-sm font-bold text-green-600">{formatAmountWithCurrency(invoice.total || invoice.amount)}</span>
+                        )}
+                      </td>
+                      
+                      <td className="p-4">
+                        {isEditing ? (
+                          <div className="space-y-2">
+                            <div>
+                              <label className="text-xs text-gray-600">Payment Days:</label>
+                              <input 
+                                type="number"
+                                value={editForm.paymentDays}
+                                onChange={(e) => setEditForm({...editForm, paymentDays: e.target.value})}
+                                className="border rounded px-2 py-1 w-20 text-sm mt-1"
+                                placeholder="Days"
+                                min="1"
+                              />
+                            </div>
+                            {editForm.status === 'partial' && (
+                              <div>
+                                <label className="text-xs text-gray-600">Received:</label>
+                                <input 
+                                  type="number"
+                                  value={editForm.amountReceived}
+                                  onChange={(e) => setEditForm({...editForm, amountReceived: e.target.value})}
+                                  className="border rounded px-2 py-1 w-24 text-sm mt-1"
+                                  placeholder="Amount"
+                                  min="0"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-sm space-y-1">
+                            <div className="text-gray-600">
+                              <span className="font-medium">{invoice.paymentDays || 30}</span> days
+                            </div>
+                            {invoice.status === 'partial' && (
+                              <div className="bg-yellow-50 p-2 rounded border border-yellow-200">
+                                <div className="text-xs text-gray-600">Received:</div>
+                                <div className="font-medium text-yellow-700">₹{formatAmount(invoice.amountReceived || 0)}</div>
+                                <div className="text-xs text-gray-600 mt-1">Remaining:</div>
+                                <div className="font-bold text-yellow-900">₹{formatAmount(invoice.remainingAmount || 0)}</div>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </td>
                       
@@ -1020,19 +1095,72 @@ export default function InvoiceManagement() {
                     </span>
                   </div>
                   
-                  {/* Services Display/Edit with Individual Amounts */}
+                  {/* Services Display/Edit */}
                   <div>
                     {isEditing ? (
                       <div className="space-y-2">
                         <label className="block text-sm font-medium text-gray-700">Services</label>
-                        <textarea
-                          value={editForm.service}
-                          onChange={(e) => setEditForm({...editForm, service: e.target.value})}
-                          className="w-full border rounded px-2 py-1.5 text-sm"
-                          placeholder="SEO, Ads, Web Development"
-                          rows="3"
-                        />
-                        <p className="text-xs text-gray-500">Edit services</p>
+                        
+                        {/* Add Service */}
+                        <div className="bg-blue-50 p-2 rounded border border-blue-200">
+                          <div className="text-xs font-semibold text-gray-700 mb-1">Add Service:</div>
+                          <div className="flex gap-1 mb-1">
+                            <input
+                              type="text"
+                              value={editServiceName}
+                              onChange={(e) => setEditServiceName(e.target.value)}
+                              className="flex-1 border rounded px-2 py-1 text-sm"
+                              placeholder="Service name"
+                            />
+                          </div>
+                          <div className="flex gap-1">
+                            <input
+                              type="number"
+                              value={editServiceAmount}
+                              onChange={(e) => setEditServiceAmount(e.target.value)}
+                              className="flex-1 border rounded px-2 py-1 text-sm"
+                              placeholder="Amount"
+                            />
+                            <button
+                              type="button"
+                              onClick={handleAddServiceInEdit}
+                              className="bg-blue-600 text-white px-3 rounded text-sm hover:bg-blue-700"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        </div>
+                        
+                        {/* Services List */}
+                        <div className="space-y-1">
+                          {editForm.selectedServices.map((service, idx) => (
+                            <div key={idx} className="bg-white p-2 rounded border">
+                              <div className="flex gap-1 mb-1">
+                                <input
+                                  type="text"
+                                  value={service.name}
+                                  onChange={(e) => handleUpdateServiceInEdit(idx, 'name', e.target.value)}
+                                  className="flex-1 border rounded px-2 py-1 text-sm"
+                                  placeholder="Service"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemoveServiceInEdit(idx)}
+                                  className="text-red-600 p-1"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                              <input
+                                type="number"
+                                value={service.amount}
+                                onChange={(e) => handleUpdateServiceInEdit(idx, 'amount', e.target.value)}
+                                className="w-full border rounded px-2 py-1 text-sm"
+                                placeholder="Amount"
+                              />
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     ) : (
                       <div className="bg-gray-50 p-3 rounded-lg">
@@ -1056,15 +1184,55 @@ export default function InvoiceManagement() {
                     )}
                   </div>
                   
+                  {/* Payment Info */}
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <div className="text-xs text-gray-600 mb-2">Payment Info:</div>
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-xs text-gray-600">Payment Days:</label>
+                          <input 
+                            type="number"
+                            value={editForm.paymentDays}
+                            onChange={(e) => setEditForm({...editForm, paymentDays: e.target.value})}
+                            className="w-full border rounded px-2 py-1 text-sm mt-1"
+                            placeholder="Days"
+                            min="1"
+                          />
+                        </div>
+                        {editForm.status === 'partial' && (
+                          <div>
+                            <label className="text-xs text-gray-600">Amount Received:</label>
+                            <input 
+                              type="number"
+                              value={editForm.amountReceived}
+                              onChange={(e) => setEditForm({...editForm, amountReceived: e.target.value})}
+                              className="w-full border rounded px-2 py-1 text-sm mt-1"
+                              placeholder="Received amount"
+                              min="0"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <div className="text-sm text-gray-700">
+                          Payment due in: <span className="font-semibold">{invoice.paymentDays || 30} days</span>
+                        </div>
+                        {invoice.status === 'partial' && (
+                          <div className="mt-2 bg-yellow-50 p-2 rounded border border-yellow-200">
+                            <div className="text-xs text-gray-600">Amount Received:</div>
+                            <div className="font-medium text-yellow-700">₹{formatAmount(invoice.amountReceived || 0)}</div>
+                            <div className="text-xs text-gray-600 mt-1">Remaining:</div>
+                            <div className="font-bold text-yellow-900">₹{formatAmount(invoice.remainingAmount || 0)}</div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  
                   {isEditing ? (
                     <div className="space-y-2 bg-gray-50 p-3 rounded-lg">
-                      <input 
-                        type="number"
-                        value={editForm.amount}
-                        onChange={(e) => setEditForm({...editForm, amount: e.target.value})}
-                        className="w-full border rounded px-2 py-1.5 text-sm"
-                        placeholder="Amount"
-                      />
                       <input 
                         type="number"
                         value={editForm.tax}
