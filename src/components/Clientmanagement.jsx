@@ -216,13 +216,11 @@ export default function ClientManagement() {
     setResetMessage('');
   };
 
-  // Show login/reset form if not authenticated - RESPONSIVE
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 px-3 py-4 sm:px-4 sm:py-6 md:px-6">
         <div className="bg-white p-5 sm:p-6 md:p-8 rounded-xl sm:rounded-2xl shadow-lg sm:shadow-xl w-full max-w-[95%] sm:max-w-md border border-slate-200">
           {!showResetPassword ? (
-            // Login Form - Responsive
             <>
               <div className="text-center mb-6 sm:mb-8">
                 <div className="inline-flex items-center justify-center w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl sm:rounded-2xl mb-3 sm:mb-4 shadow-lg">
@@ -321,7 +319,6 @@ export default function ClientManagement() {
               </div>
             </>
           ) : (
-            // Reset Password Form - Responsive
             <>
               <button
                 onClick={backToLogin}
@@ -507,12 +504,10 @@ export default function ClientManagement() {
     );
   }
 
-  // Show client management if authenticated - RESPONSIVE
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <div className="px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto">
         
-        {/* Header - Responsive */}
         <div className="mb-4 sm:mb-6 lg:mb-8">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-3 sm:gap-4">
             <div className="flex items-start gap-2.5 sm:gap-3 lg:gap-4">
@@ -547,7 +542,6 @@ export default function ClientManagement() {
           </div>
         )}
         
-        {/* Form - Responsive */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5 lg:p-6 mb-4 sm:mb-6 lg:mb-8">
           <div className="flex items-center gap-2 sm:gap-3 mb-4 sm:mb-5 lg:mb-6 pb-3 sm:pb-4 border-b border-slate-100">
             <div className="p-1.5 sm:p-2 bg-blue-50 rounded-lg flex-shrink-0">
@@ -562,7 +556,7 @@ export default function ClientManagement() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 lg:gap-5 mb-4 sm:mb-5 lg:mb-6">
               <div>
                 <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2">
-                  Full Name
+                  Full Name <span className="text-rose-500">*</span>
                 </label>
                 <div className="relative">
                   <User className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
@@ -579,7 +573,7 @@ export default function ClientManagement() {
               
               <div>
                 <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2">
-                  Email Address
+                  Email Address <span className="text-slate-400 text-xs">(Optional)</span>
                 </label>
                 <div className="relative">
                   <Mail className="absolute left-2.5 sm:left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
@@ -589,7 +583,6 @@ export default function ClientManagement() {
                     value={form.email}
                     onChange={(e) => setForm({...form, email: e.target.value})}
                     className="w-full pl-9 sm:pl-11 pr-3 sm:pr-4 py-2.5 sm:py-3 text-sm sm:text-base border border-slate-300 rounded-lg sm:rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-slate-50" 
-                    required 
                   />
                 </div>
               </div>
@@ -650,7 +643,6 @@ export default function ClientManagement() {
           </form>
         </div>
         
-        {/* Clients Table/Cards - Responsive */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="bg-gradient-to-r from-slate-50 to-blue-50 p-4 sm:p-5 lg:p-6 border-b border-slate-200">
             <div className="flex flex-col xs:flex-row xs:items-center xs:justify-between gap-2 sm:gap-3">
@@ -663,7 +655,6 @@ export default function ClientManagement() {
             </div>
           </div>
           
-          {/* Desktop Table View */}
           <div className="hidden lg:block overflow-x-auto">
             <table className="w-full">
               <thead>
@@ -713,13 +704,13 @@ export default function ClientManagement() {
                               {client.name?.charAt(0) || 'N'}
                             </span>
                           </div>
-                          <span className="font-semibold text-slate-800 text-sm lg:text-base truncate">{client.name}</span>
+                          <span className="font-bold text-slate-800 text-sm lg:text-base truncate">{client.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm truncate max-w-[200px]">{client.email}</td>
-                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm">{client.phone || '—'}</td>
-                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm truncate max-w-[150px]">{client.company || '—'}</td>
-                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-500 text-xs truncate max-w-[180px]">
+                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm font-bold truncate max-w-[200px]">{client.email || '—'}</td>
+                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm font-bold">{client.phone || '—'}</td>
+                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-600 text-sm font-bold truncate max-w-[150px]">{client.company || '—'}</td>
+                      <td className="px-4 lg:px-6 py-3 lg:py-4 text-slate-500 text-xs font-bold truncate max-w-[180px]">
                         {client.createdByEmail || client.createdBy || user.email}
                       </td>
                       <td className="px-4 lg:px-6 py-3 lg:py-4">
@@ -747,7 +738,6 @@ export default function ClientManagement() {
             </table>
           </div>
           
-          {/* Mobile/Tablet Card View - Responsive */}
           <div className="lg:hidden divide-y divide-slate-100">
             {clients.length === 0 ? (
               <div className="px-4 py-12 sm:px-6 sm:py-16">
@@ -779,10 +769,12 @@ export default function ClientManagement() {
                   </div>
                   
                   <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4">
-                    <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-600">
-                      <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 flex-shrink-0" />
-                      <span className="truncate">{client.email}</span>
-                    </div>
+                    {client.email && (
+                      <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-600">
+                        <Mail className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 flex-shrink-0" />
+                        <span className="truncate">{client.email}</span>
+                      </div>
+                    )}
                     {client.phone && (
                       <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-slate-600">
                         <Phone className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 flex-shrink-0" />

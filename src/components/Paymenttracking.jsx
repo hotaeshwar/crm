@@ -16,7 +16,8 @@ import {
   Receipt,
   Check,
   ChevronDown,
-  User
+  User,
+  Filter
 } from 'lucide-react';
 
 export default function PaymentTracking() {
@@ -31,6 +32,7 @@ export default function PaymentTracking() {
   const [editId, setEditId] = useState(null);
   const [error, setError] = useState('');
   const [showInvoiceDropdown, setShowInvoiceDropdown] = useState(false);
+  const [billTypeFilter, setBillTypeFilter] = useState('all');
 
   useEffect(() => {
     const unsubClients = onSnapshot(
@@ -178,7 +180,49 @@ export default function PaymentTracking() {
     }
   };
 
-  const totalPayments = payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  const getBillTypeColor = (billType) => {
+    return billType === 'debit' 
+      ? 'bg-blue-50 text-blue-700 border-blue-200' 
+      : 'bg-purple-50 text-purple-700 border-purple-200';
+  };
+
+  // Calculate totals by bill type - ONLY count invoices with explicit billType
+  const debitTotal = payments
+    .filter(payment => {
+      const invoice = invoices.find(i => i.id === payment.invoiceId);
+      return invoice && invoice.billType === 'debit';
+    })
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const creditTotal = payments
+    .filter(payment => {
+      const invoice = invoices.find(i => i.id === payment.invoiceId);
+      return invoice && invoice.billType === 'credit';
+    })
+    .reduce((sum, p) => sum + (p.amount || 0), 0);
+
+  const debitCount = payments.filter(p => {
+    const inv = invoices.find(i => i.id === p.invoiceId);
+    return inv && inv.billType === 'debit';
+  }).length;
+
+  const creditCount = payments.filter(p => {
+    const inv = invoices.find(i => i.id === p.invoiceId);
+    return inv && inv.billType === 'credit';
+  }).length;
+
+  // Filter payments based on bill type - ONLY show payments with explicit billType when filtering
+  const filteredPayments = payments.filter(payment => {
+    if (billTypeFilter === 'all') return true;
+    const invoice = invoices.find(i => i.id === payment.invoiceId);
+    return invoice && invoice.billType === billTypeFilter;
+  });
+
+  // Filter invoices for dropdown based on bill type filter
+  const filteredInvoicesForDropdown = invoices.filter(invoice => {
+    if (billTypeFilter === 'all') return true;
+    return invoice.billType === billTypeFilter;
+  });
 
   const selectedInvoice = invoices.find(i => i.id === form.invoiceId);
   const selectedClient = selectedInvoice ? clients.find(c => c.id === selectedInvoice.clientId) : null;
@@ -200,7 +244,7 @@ export default function PaymentTracking() {
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
       <div className="px-3 py-4 sm:px-4 sm:py-5 md:px-6 md:py-6 lg:px-8 lg:py-8 max-w-[1600px] mx-auto">
         
-        {/* Header - Simplified without stats */}
+        {/* Header */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg p-4 sm:p-5 md:p-6 mb-4 sm:mb-6 border border-slate-100">
           <div className="flex items-start gap-2.5 sm:gap-3">
             <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-2 sm:p-2.5 lg:p-3 rounded-xl shadow-lg flex-shrink-0">
@@ -213,44 +257,68 @@ export default function PaymentTracking() {
           </div>
         </div>
 
-        {/* Total Received Stats Banner - New Beautiful Placement */}
+        {/* Bill Type Filter Tabs - 3 Equal Tabs */}
         <div className="mb-4 sm:mb-6">
-          <div className="bg-gradient-to-br from-emerald-500 via-green-500 to-teal-500 rounded-xl sm:rounded-2xl shadow-xl p-4 sm:p-5 md:p-6 lg:p-8 relative overflow-hidden">
-            {/* Decorative background pattern */}
-            <div className="absolute inset-0 opacity-10">
-              <div className="absolute top-0 right-0 w-32 h-32 sm:w-48 sm:h-48 bg-white rounded-full -mr-16 -mt-16"></div>
-              <div className="absolute bottom-0 left-0 w-24 h-24 sm:w-40 sm:h-40 bg-white rounded-full -ml-12 -mb-12"></div>
-            </div>
-            
-            <div className="relative z-10">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
-                <div className="flex items-start gap-3 sm:gap-4">
-                  <div className="bg-white/20 backdrop-blur-sm p-2.5 sm:p-3 lg:p-4 rounded-xl sm:rounded-2xl flex-shrink-0">
-                    <TrendingUp className="w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 text-white" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2 mb-1 sm:mb-2">
-                      <span className="text-xs sm:text-sm font-semibold text-white/90 uppercase tracking-wide">Total Received</span>
-                    </div>
-                    <h3 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white mb-1 sm:mb-2">
-                      ₹{totalPayments.toLocaleString('en-IN')}
-                    </h3>
-                    <div className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-sm text-white/90">
-                      <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                      <span className="font-medium">{payments.length} payment{payments.length !== 1 ? 's' : ''} recorded</span>
-                    </div>
-                  </div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <button
+              onClick={() => setBillTypeFilter('debit')}
+              className={`px-3 py-3 sm:px-5 sm:py-4 rounded-xl sm:rounded-2xl font-semibold transition-all shadow-lg ${
+                billTypeFilter === 'debit'
+                  ? 'bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-200'
+                  : 'bg-white text-slate-700 hover:shadow-xl border border-slate-200'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                <CreditCard className={`w-5 h-5 sm:w-6 sm:h-6 ${billTypeFilter === 'debit' ? 'text-white' : 'text-blue-600'}`} />
+                <div className="text-xs sm:text-sm font-bold">Debit</div>
+                <div className={`text-lg sm:text-xl lg:text-2xl font-bold ${billTypeFilter === 'debit' ? 'text-white' : 'text-blue-600'}`}>
+                  ₹{debitTotal.toLocaleString('en-IN')}
                 </div>
-                
-                {/* Optional: Add a small badge or indicator */}
-                <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-lg sm:rounded-xl px-3 py-2 sm:px-4 sm:py-3 self-start sm:self-auto">
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-emerald-200 rounded-full animate-pulse"></div>
-                    <span className="text-xs sm:text-sm font-medium text-white/90">Live Updates</span>
-                  </div>
+                <div className={`text-[10px] sm:text-xs ${billTypeFilter === 'debit' ? 'text-white/80' : 'text-slate-500'}`}>
+                  {debitCount} payment{debitCount !== 1 ? 's' : ''}
                 </div>
               </div>
-            </div>
+            </button>
+
+            <button
+              onClick={() => setBillTypeFilter('credit')}
+              className={`px-3 py-3 sm:px-5 sm:py-4 rounded-xl sm:rounded-2xl font-semibold transition-all shadow-lg ${
+                billTypeFilter === 'credit'
+                  ? 'bg-gradient-to-br from-purple-500 to-purple-600 text-white shadow-purple-200'
+                  : 'bg-white text-slate-700 hover:shadow-xl border border-slate-200'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                <CreditCard className={`w-5 h-5 sm:w-6 sm:h-6 ${billTypeFilter === 'credit' ? 'text-white' : 'text-purple-600'}`} />
+                <div className="text-xs sm:text-sm font-bold">Credit</div>
+                <div className={`text-lg sm:text-xl lg:text-2xl font-bold ${billTypeFilter === 'credit' ? 'text-white' : 'text-purple-600'}`}>
+                  ₹{creditTotal.toLocaleString('en-IN')}
+                </div>
+                <div className={`text-[10px] sm:text-xs ${billTypeFilter === 'credit' ? 'text-white/80' : 'text-slate-500'}`}>
+                  {creditCount} payment{creditCount !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setBillTypeFilter('all')}
+              className={`px-3 py-3 sm:px-5 sm:py-4 rounded-xl sm:rounded-2xl font-semibold transition-all shadow-lg ${
+                billTypeFilter === 'all'
+                  ? 'bg-gradient-to-br from-emerald-500 to-emerald-600 text-white shadow-emerald-200'
+                  : 'bg-white text-slate-700 hover:shadow-xl border border-slate-200'
+              }`}
+            >
+              <div className="flex flex-col items-center gap-1.5 sm:gap-2">
+                <TrendingUp className={`w-5 h-5 sm:w-6 sm:h-6 ${billTypeFilter === 'all' ? 'text-white' : 'text-emerald-600'}`} />
+                <div className="text-xs sm:text-sm font-bold">Total</div>
+                <div className={`text-lg sm:text-xl lg:text-2xl font-bold ${billTypeFilter === 'all' ? 'text-white' : 'text-emerald-600'}`}>
+                  ₹{(debitTotal + creditTotal).toLocaleString('en-IN')}
+                </div>
+                <div className={`text-[10px] sm:text-xs ${billTypeFilter === 'all' ? 'text-white/80' : 'text-slate-500'}`}>
+                  {payments.length} payment{payments.length !== 1 ? 's' : ''}
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -261,7 +329,7 @@ export default function PaymentTracking() {
           </div>
         )}
 
-        {/* Payment Form - Responsive */}
+        {/* Payment Form */}
         <form onSubmit={handleSubmit} className="bg-white p-3 sm:p-4 md:p-5 lg:p-6 rounded-xl sm:rounded-2xl shadow-lg mb-4 sm:mb-6 border border-slate-100">
           {editId && (
             <div className="mb-3 sm:mb-4 p-2.5 sm:p-3 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-1.5 sm:gap-2">
@@ -282,10 +350,14 @@ export default function PaymentTracking() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4">
-            {/* Invoice Dropdown - Responsive */}
+            {/* Invoice Dropdown */}
             <div className="relative invoice-dropdown-container sm:col-span-2 md:col-span-1">
               <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-2">
-                Select Invoice
+                Select Invoice {billTypeFilter !== 'all' && (
+                  <span className="text-[10px] sm:text-xs text-slate-500">
+                    (showing {billTypeFilter} bills only)
+                  </span>
+                )}
               </label>
               <div className="relative">
                 <div 
@@ -306,6 +378,11 @@ export default function PaymentTracking() {
                             </div>
                           )}
                         </div>
+                        {selectedInvoice?.billType && (
+                          <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border flex-shrink-0 ${getBillTypeColor(selectedInvoice.billType)}`}>
+                            {selectedInvoice.billType.toUpperCase()}
+                          </span>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1.5 sm:gap-2">
@@ -320,10 +397,12 @@ export default function PaymentTracking() {
                 {showInvoiceDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 sm:max-h-60 overflow-y-auto">
                     <div className="p-2 bg-slate-50 border-b sticky top-0">
-                      <div className="text-[10px] sm:text-xs font-semibold text-slate-700 mb-1">Available Invoices</div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-slate-700 mb-1">
+                        Available Invoices {billTypeFilter !== 'all' && `(${billTypeFilter})`}
+                      </div>
                     </div>
-                    {invoices.length > 0 ? (
-                      invoices.map((invoice) => {
+                    {filteredInvoicesForDropdown.length > 0 ? (
+                      filteredInvoicesForDropdown.map((invoice) => {
                         const client = clients.find(c => c.id === invoice.clientId);
                         const isSelected = form.invoiceId === invoice.id;
                         return (
@@ -337,7 +416,14 @@ export default function PaymentTracking() {
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex-1 min-w-0">
-                                <div className="text-xs sm:text-sm font-medium text-slate-900 truncate">{invoice.invoiceNumber}</div>
+                                <div className="flex items-center gap-1.5">
+                                  <div className="text-xs sm:text-sm font-medium text-slate-900 truncate">{invoice.invoiceNumber}</div>
+                                  {invoice.billType && (
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border flex-shrink-0 ${getBillTypeColor(invoice.billType)}`}>
+                                      {invoice.billType.charAt(0).toUpperCase()}
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="text-[10px] sm:text-xs text-slate-600 flex items-center gap-1 mt-0.5 sm:mt-1 truncate">
                                   <User className="w-2.5 h-2.5 sm:w-3 sm:h-3 flex-shrink-0" />
                                   {client?.name || 'Unknown Client'}
@@ -363,7 +449,7 @@ export default function PaymentTracking() {
                       })
                     ) : (
                       <div className="px-3 py-2 text-xs sm:text-sm text-slate-500">
-                        No invoices found
+                        No {billTypeFilter !== 'all' ? billTypeFilter : ''} invoices found
                       </div>
                     )}
                   </div>
@@ -376,12 +462,17 @@ export default function PaymentTracking() {
                     <span className={`px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[10px] sm:text-xs flex-shrink-0 ${selectedInvoice.status === 'paid' ? 'bg-emerald-100 text-emerald-700' : selectedInvoice.status === 'partial' ? 'bg-amber-100 text-amber-700' : 'bg-rose-100 text-rose-700'}`}>
                       {selectedInvoice.status || 'unpaid'}
                     </span>
+                    {selectedInvoice.billType && (
+                      <span className={`px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-full text-[10px] sm:text-xs flex-shrink-0 border font-semibold ${getBillTypeColor(selectedInvoice.billType)}`}>
+                        {selectedInvoice.billType.charAt(0).toUpperCase() + selectedInvoice.billType.slice(1)}
+                      </span>
+                    )}
                   </div>
                 </div>
               )}
             </div>
 
-            {/* Payment Date - Responsive */}
+            {/* Payment Date */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-2">
                 Payment Date
@@ -398,7 +489,7 @@ export default function PaymentTracking() {
               </div>
             </div>
 
-            {/* Payment Method - Responsive */}
+            {/* Payment Method */}
             <div>
               <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-2">
                 Payment Method
@@ -420,14 +511,14 @@ export default function PaymentTracking() {
             </div>
           </div>
 
-          {/* Invoice Details Preview - Responsive */}
+          {/* Invoice Details Preview */}
           {form.invoiceId && selectedInvoice && (
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-slate-50 rounded-lg border border-slate-200">
               <h4 className="font-semibold text-slate-800 text-sm sm:text-base mb-2 sm:mb-3 flex items-center gap-1.5 sm:gap-2">
                 <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 Invoice & Payment Details
               </h4>
-              <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 gap-2 sm:gap-3 lg:gap-4">
+              <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
                 <div className="bg-white p-2 sm:p-2.5 lg:p-3 rounded-lg shadow-sm">
                   <span className="text-[10px] sm:text-xs text-slate-600 block mb-0.5 sm:mb-1">Invoice Number</span>
                   <span className="text-xs sm:text-sm font-medium text-slate-900 truncate block">{selectedInvoice.invoiceNumber}</span>
@@ -436,6 +527,15 @@ export default function PaymentTracking() {
                   <span className="text-[10px] sm:text-xs text-slate-600 block mb-0.5 sm:mb-1">Client</span>
                   <span className="text-xs sm:text-sm font-medium text-slate-900 truncate block">{selectedClient?.name || 'N/A'}</span>
                 </div>
+                {selectedInvoice.billType && (
+                  <div className="bg-white p-2 sm:p-2.5 lg:p-3 rounded-lg shadow-sm">
+                    <span className="text-[10px] sm:text-xs text-slate-600 block mb-0.5 sm:mb-1">Bill Type</span>
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-semibold border ${getBillTypeColor(selectedInvoice.billType)}`}>
+                      <CreditCard className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                      {selectedInvoice.billType.charAt(0).toUpperCase() + selectedInvoice.billType.slice(1)}
+                    </span>
+                  </div>
+                )}
                 <div className="bg-white p-2 sm:p-2.5 lg:p-3 rounded-lg shadow-sm xs:col-span-2 md:col-span-1">
                   <span className="text-[10px] sm:text-xs text-slate-600 block mb-0.5 sm:mb-1">Payment Amount</span>
                   <span className="text-xs sm:text-sm font-bold text-emerald-600 truncate block">
@@ -476,12 +576,17 @@ export default function PaymentTracking() {
           </div>
         </form>
 
-        {/* Payment Records Table/Cards - Responsive */}
+        {/* Payment Records Table/Cards */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg overflow-hidden border border-slate-100">
           <div className="p-3 sm:p-4 lg:p-5 xl:p-6 border-b border-slate-200 bg-gradient-to-r from-slate-50 via-indigo-50 to-purple-50">
             <div className="flex items-center justify-between">
               <h3 className="text-base sm:text-lg font-semibold text-slate-800">
-                Payment History ({payments.length})
+                Payment History ({filteredPayments.length})
+                {billTypeFilter !== 'all' && (
+                  <span className="text-xs sm:text-sm font-normal text-slate-600 ml-2">
+                    ({billTypeFilter} bills)
+                  </span>
+                )}
               </h3>
             </div>
           </div>
@@ -493,6 +598,7 @@ export default function PaymentTracking() {
                 <tr>
                   <th className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Invoice #</th>
                   <th className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Client</th>
+                  <th className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Bill Type</th>
                   <th className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Amount</th>
                   <th className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Date</th>
                   <th className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Payment Method</th>
@@ -500,20 +606,22 @@ export default function PaymentTracking() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {payments.length === 0 ? (
+                {filteredPayments.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="px-6 py-12 lg:py-16 text-center text-slate-500">
+                    <td colSpan="7" className="px-6 py-12 lg:py-16 text-center text-slate-500">
                       <div className="flex flex-col items-center gap-3">
                         <div className="p-3 lg:p-4 bg-slate-50 rounded-full">
                           <Receipt className="w-10 h-10 lg:w-12 lg:h-12 text-slate-300" />
                         </div>
-                        <p className="text-base lg:text-lg font-medium text-slate-600">No payments recorded yet</p>
+                        <p className="text-base lg:text-lg font-medium text-slate-600">
+                          No {billTypeFilter !== 'all' ? billTypeFilter : ''} payments recorded yet
+                        </p>
                         <p className="text-sm text-slate-500">Record your first payment to get started</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  payments.map(payment => {
+                  filteredPayments.map(payment => {
                     const invoice = invoices.find(i => i.id === payment.invoiceId);
                     const client = invoice ? clients.find(c => c.id === invoice.clientId) : null;
                     
@@ -533,6 +641,16 @@ export default function PaymentTracking() {
                           <span className="text-xs sm:text-sm text-slate-700 truncate block max-w-[150px]">
                             {client?.name || 'N/A'}
                           </span>
+                        </td>
+                        <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
+                          {invoice?.billType ? (
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border ${getBillTypeColor(invoice.billType)}`}>
+                              <CreditCard className="w-3 h-3" />
+                              {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className="text-base lg:text-lg font-semibold text-emerald-600">
@@ -574,20 +692,22 @@ export default function PaymentTracking() {
             </table>
           </div>
 
-          {/* Mobile/Tablet Card View - Responsive */}
+          {/* Mobile/Tablet Card View */}
           <div className="lg:hidden divide-y divide-slate-100">
-            {payments.length === 0 ? (
+            {filteredPayments.length === 0 ? (
               <div className="px-4 py-12 sm:px-6 sm:py-16 text-center text-slate-500">
                 <div className="flex flex-col items-center gap-3">
                   <div className="p-3 sm:p-4 bg-slate-50 rounded-full">
                     <Receipt className="w-10 h-10 sm:w-12 sm:h-12 text-slate-300" />
                   </div>
-                  <p className="text-base sm:text-lg font-medium text-slate-600">No payments recorded yet</p>
+                  <p className="text-base sm:text-lg font-medium text-slate-600">
+                    No {billTypeFilter !== 'all' ? billTypeFilter : ''} payments recorded yet
+                  </p>
                   <p className="text-sm text-slate-500">Record your first payment to get started</p>
                 </div>
               </div>
             ) : (
-              payments.map(payment => {
+              filteredPayments.map(payment => {
                 const invoice = invoices.find(i => i.id === payment.invoiceId);
                 const client = invoice ? clients.find(c => c.id === invoice.clientId) : null;
                 
@@ -615,11 +735,17 @@ export default function PaymentTracking() {
                         <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 flex-shrink-0" />
                         <span className="truncate">{payment.paymentDate}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-medium border ${getMethodBadgeColor(payment.method)}`}>
                           {getMethodIcon(payment.method)}
                           <span className="capitalize">{payment.method}</span>
                         </span>
+                        {invoice?.billType && (
+                          <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-xs font-semibold border ${getBillTypeColor(invoice.billType)}`}>
+                            <CreditCard className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                            {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
+                          </span>
+                        )}
                       </div>
                     </div>
 

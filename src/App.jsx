@@ -36,20 +36,20 @@ function App() {
     return (
       <div className="fixed inset-0 bg-white flex items-center justify-center z-[9999]">
         <div className="text-center">
-          <div className="mb-6 sm:mb-8">
+          <div className="mb-8 sm:mb-12">
             <img 
               src="/images/LOGO.png" 
               alt="BID Logo" 
-              className="h-44 w-44 sm:h-56 sm:w-56 md:h-72 md:w-72 lg:h-96 lg:w-96 mx-auto object-contain drop-shadow-2xl"
+              className="h-64 w-64 sm:h-80 sm:w-80 md:h-96 md:w-96 lg:h-[500px] lg:w-[500px] mx-auto object-contain drop-shadow-2xl"
             />
           </div>
-          <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3 sm:mb-4 tracking-tight">
+          <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-4 sm:mb-6 tracking-tight">
             CRM
           </h1>
-          <div className="flex items-center justify-center gap-2 sm:gap-3">
-            <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-indigo-600 rounded-full opacity-75"></div>
-            <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-purple-600 rounded-full opacity-75"></div>
-            <div className="h-2 w-2 sm:h-2.5 sm:w-2.5 bg-pink-600 rounded-full opacity-75"></div>
+          <div className="flex items-center justify-center gap-3 sm:gap-4">
+            <div className="h-3 w-3 sm:h-4 sm:w-4 bg-indigo-600 rounded-full opacity-75"></div>
+            <div className="h-3 w-3 sm:h-4 sm:w-4 bg-purple-600 rounded-full opacity-75"></div>
+            <div className="h-3 w-3 sm:h-4 sm:w-4 bg-pink-600 rounded-full opacity-75"></div>
           </div>
         </div>
       </div>
@@ -177,88 +177,7 @@ function App() {
         <ActiveComponent />
       </main>
 
-      {/* Footer - Responsive */}
-      <footer className="bg-gradient-to-r from-slate-800 via-slate-900 to-slate-800 text-white mt-12 sm:mt-16 md:mt-20 border-t-4 border-indigo-500">
-        <div className="w-full px-3 sm:px-4 md:px-6 lg:px-8 xl:px-12 2xl:max-w-[1920px] 2xl:mx-auto">
-          <div className="py-6 sm:py-8 md:py-10 lg:py-12">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8 lg:gap-10 mb-6 sm:mb-8">
-              {/* Brand */}
-              <div className="text-center sm:text-left">
-                <div className="flex items-center justify-center sm:justify-start gap-2 sm:gap-3 mb-3 sm:mb-4">
-                  <img 
-                    src="/images/LOGO.png" 
-                    alt="BID Logo" 
-                    className="h-8 w-8 sm:h-10 sm:w-10 object-contain"
-                  />
-                  <h3 className="text-lg sm:text-xl md:text-2xl font-black bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
-                    CRM
-                  </h3>
-                </div>
-                <p className="text-xs sm:text-sm text-slate-400 leading-relaxed max-w-xs mx-auto sm:mx-0">
-                  Streamline your business operations with our powerful CRM solution.
-                </p>
-              </div>
-
-              {/* Quick Links */}
-              <div className="text-center sm:text-left">
-                <h4 className="text-sm sm:text-base font-bold mb-3 sm:mb-4 text-indigo-400">Quick Links</h4>
-                <ul className="space-y-2">
-                  {tabs.map(tab => (
-                    <li key={tab.id}>
-                      <button
-                        onClick={() => handleTabClick(tab.id)}
-                        className="text-xs sm:text-sm text-slate-400 hover:text-white hover:underline"
-                      >
-                        {tab.name}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Contact */}
-              <div className="text-center sm:text-left">
-                <h4 className="text-sm sm:text-base font-bold mb-3 sm:mb-4 text-indigo-400">Contact</h4>
-                <ul className="space-y-2 text-xs sm:text-sm text-slate-400">
-                  <li>Email: info@crm.com</li>
-                  <li>Phone: +1 (555) 123-4567</li>
-                  <li>Support: support@crm.com</li>
-                </ul>
-              </div>
-
-              {/* Social */}
-              <div className="text-center sm:text-left">
-                <h4 className="text-sm sm:text-base font-bold mb-3 sm:mb-4 text-indigo-400">Follow Us</h4>
-                <div className="flex gap-3 sm:gap-4 justify-center sm:justify-start">
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center hover:shadow-lg cursor-pointer">
-                    <span className="text-xs sm:text-sm font-bold">f</span>
-                  </div>
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center hover:shadow-lg cursor-pointer">
-                    <span className="text-xs sm:text-sm font-bold">in</span>
-                  </div>
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg sm:rounded-xl flex items-center justify-center hover:shadow-lg cursor-pointer">
-                    <span className="text-xs sm:text-sm font-bold">X</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bottom Bar */}
-            <div className="pt-6 sm:pt-8 border-t border-slate-700">
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 sm:gap-4 text-xs sm:text-sm text-slate-400">
-                <p className="text-center sm:text-left">
-                  © 2026 CRM. All rights reserved.
-                </p>
-                <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6">
-                  <button className="hover:text-white hover:underline">Privacy Policy</button>
-                  <button className="hover:text-white hover:underline">Terms of Service</button>
-                  <button className="hover:text-white hover:underline">Cookie Policy</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </footer>
+      {/* Footer section completely removed as requested */}
     </div>
   );
 }
