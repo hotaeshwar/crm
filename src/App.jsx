@@ -44,7 +44,7 @@ function App() {
             />
           </div>
           <h1 className="text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-4 sm:mb-6 tracking-tight">
-            CRM
+            <span>CRM Accounting</span>
           </h1>
           <div className="flex items-center justify-center gap-3 sm:gap-4">
             <div className="h-3 w-3 sm:h-4 sm:w-4 bg-indigo-600 rounded-full opacity-75"></div>
@@ -71,7 +71,7 @@ function App() {
               />
               <div>
                 <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent leading-none">
-                  CRM
+                  <span>CRM Accounting</span>
                 </h1>
                 <p className="hidden sm:block text-[10px] md:text-xs lg:text-sm text-slate-500 font-medium mt-0.5 md:mt-1">Business Intelligence Dashboard</p>
               </div>
@@ -176,8 +176,6 @@ function App() {
       <main className="w-full">
         <ActiveComponent />
       </main>
-
-      {/* Footer section completely removed as requested */}
     </div>
   );
 }
