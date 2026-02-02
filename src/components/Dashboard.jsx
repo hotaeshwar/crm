@@ -6,7 +6,8 @@ import {
   FileText, Calendar, IndianRupee, 
   DollarSign, CheckCircle, Clock, ArrowRight,
   PieChart, BarChart3, Bell, X, AlertTriangle,
-  Volume2, VolumeX, CreditCard
+  Volume2, VolumeX, CreditCard, TrendingDown,
+  Activity, Target, Percent
 } from 'lucide-react';
 
 export default function Dashboard() {
@@ -22,7 +23,6 @@ export default function Dashboard() {
   });
   const [clients, setClients] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [payments, setPayments] = useState([]);
   const [showReminders, setShowReminders] = useState(true);
   const [overdueInvoices, setOverdueInvoices] = useState([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -87,7 +87,6 @@ export default function Dashboard() {
       createBeep(now + 0.4, 800, 0.15);
 
       hasPlayedSound.current = true;
-      console.log('Notification sound played successfully');
     } catch (error) {
       console.error('Error playing notification sound:', error);
     }
@@ -100,10 +99,7 @@ export default function Dashboard() {
     const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snapshot) => {
       setInvoices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    const unsubPayments = onSnapshot(collection(db, 'payments'), (snapshot) => {
-      setPayments(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
-    return () => { unsubClients(); unsubInvoices(); unsubPayments(); };
+    return () => { unsubClients(); unsubInvoices(); };
   }, []);
 
   // Check for overdue invoices and play sound
@@ -114,11 +110,25 @@ export default function Dashboard() {
     const overdue = invoices.filter(invoice => {
       if (invoice.status === 'paid') return false;
       
+      // Check if invoice has a due date
       if (invoice.dueDate) {
         const dueDate = new Date(invoice.dueDate);
         dueDate.setHours(0, 0, 0, 0);
         return dueDate < today;
       }
+      
+      // Calculate due date from invoice date and payment days
+      if (invoice.date && invoice.paymentDays && invoice.paymentDays !== 'N/A') {
+        const invoiceDate = new Date(invoice.date);
+        const paymentDays = parseInt(invoice.paymentDays);
+        if (!isNaN(paymentDays)) {
+          const calculatedDueDate = new Date(invoiceDate);
+          calculatedDueDate.setDate(calculatedDueDate.getDate() + paymentDays);
+          calculatedDueDate.setHours(0, 0, 0, 0);
+          return calculatedDueDate < today;
+        }
+      }
+      
       return false;
     });
     
@@ -141,7 +151,6 @@ export default function Dashboard() {
       const amount = inv.total || inv.subtotal || inv.amount || 0;
       totalInvoiced += amount;
       
-      // Only count if billType is explicitly set
       if (inv.billType === 'debit') {
         debitInvoiced += amount;
       } else if (inv.billType === 'credit') {
@@ -149,7 +158,7 @@ export default function Dashboard() {
       }
     });
     
-    // Calculate collected with debit/credit separation
+    // Calculate collected with debit/credit separation - FIXED: No fallback to payments
     let totalCollected = 0;
     let debitCollected = 0;
     let creditCollected = 0;
@@ -166,18 +175,12 @@ export default function Dashboard() {
       
       totalCollected += collected;
       
-      // Only count if billType is explicitly set
       if (inv.billType === 'debit') {
         debitCollected += collected;
       } else if (inv.billType === 'credit') {
         creditCollected += collected;
       }
     });
-    
-    // Fallback to payments if no invoice-based collection
-    if (totalCollected === 0 && payments.length > 0) {
-      totalCollected = payments.reduce((sum, pay) => sum + (pay.amount || 0), 0);
-    }
     
     // Calculate outstanding
     const outstanding = invoices.reduce((sum, inv) => {
@@ -205,7 +208,7 @@ export default function Dashboard() {
       debitCollected,
       creditCollected
     });
-  }, [clients, invoices, payments]);
+  }, [clients, invoices]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -233,12 +236,32 @@ export default function Dashboard() {
     }
   };
 
-  const getDaysOverdue = (dueDate) => {
+  const getDaysOverdue = (invoice) => {
     const today = new Date();
-    const due = new Date(dueDate);
-    const diffTime = today - due;
+    today.setHours(0, 0, 0, 0);
+    
+    let dueDate = null;
+    
+    // First try to use stored dueDate
+    if (invoice.dueDate) {
+      dueDate = new Date(invoice.dueDate);
+    } 
+    // Otherwise calculate from date and paymentDays
+    else if (invoice.date && invoice.paymentDays && invoice.paymentDays !== 'N/A') {
+      const invoiceDate = new Date(invoice.date);
+      const paymentDays = parseInt(invoice.paymentDays);
+      if (!isNaN(paymentDays)) {
+        dueDate = new Date(invoiceDate);
+        dueDate.setDate(dueDate.getDate() + paymentDays);
+      }
+    }
+    
+    if (!dueDate) return 0;
+    
+    dueDate.setHours(0, 0, 0, 0);
+    const diffTime = today - dueDate;
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    return diffDays;
+    return Math.max(0, diffDays);
   };
 
   const toggleSound = () => {
@@ -262,6 +285,16 @@ export default function Dashboard() {
   // Count invoices by bill type
   const debitInvoiceCount = invoices.filter(inv => inv.billType === 'debit').length;
   const creditInvoiceCount = invoices.filter(inv => inv.billType === 'credit').length;
+  const noneInvoiceCount = invoices.filter(inv => !inv.billType || inv.billType === 'none').length;
+
+  // Recent invoices (last 5)
+  const recentInvoices = [...invoices]
+    .sort((a, b) => {
+      const dateA = a.createdAt?.seconds || 0;
+      const dateB = b.createdAt?.seconds || 0;
+      return dateB - dateA;
+    })
+    .slice(0, 5);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
@@ -269,7 +302,7 @@ export default function Dashboard() {
         
         {/* Payment Reminder Alerts */}
         {showReminders && overdueInvoices.length > 0 && (
-          <div className="mb-4 sm:mb-6 bg-gradient-to-r from-rose-50 to-orange-50 border-2 border-rose-200 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg animate-pulse">
+          <div className="mb-4 sm:mb-6 bg-gradient-to-r from-rose-50 to-orange-50 border-2 border-rose-200 rounded-xl sm:rounded-2xl overflow-hidden shadow-lg">
             <div className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-start justify-between gap-3 mb-3 sm:mb-4">
                 <div className="flex items-start gap-3 sm:gap-4 flex-1">
@@ -323,7 +356,7 @@ export default function Dashboard() {
                 {overdueInvoices.slice(0, 3).map(invoice => {
                   const client = clients.find(c => c.id === invoice.clientId);
                   const amount = invoice.total || invoice.subtotal || invoice.amount || 0;
-                  const daysOverdue = getDaysOverdue(invoice.dueDate);
+                  const daysOverdue = getDaysOverdue(invoice);
                   
                   return (
                     <div key={invoice.id} className="bg-white rounded-lg sm:rounded-xl p-3 sm:p-4 border border-rose-200 shadow-sm">
@@ -367,7 +400,7 @@ export default function Dashboard() {
         )}
 
         {/* Unpaid Invoices Alert Banner */}
-        {unpaidInvoices.length > 0 && (
+        {unpaidInvoices.length > 0 && !overdueInvoices.length && (
           <div className="mb-4 sm:mb-6 bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 rounded-lg sm:rounded-xl p-3 sm:p-4">
             <div className="flex items-center gap-2 sm:gap-3">
               <AlertCircle className="w-5 h-5 sm:w-6 sm:h-6 text-amber-600 flex-shrink-0" />
@@ -387,7 +420,7 @@ export default function Dashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div>
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-slate-800 mb-1 sm:mb-2">
-                Business Overview
+                Business Dashboard
               </h1>
               <p className="text-slate-600 text-xs sm:text-sm lg:text-base">
                 Real-time insights into your business performance
@@ -395,8 +428,8 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-2 sm:gap-3 bg-white px-3 py-2 sm:px-4 sm:py-3 rounded-lg sm:rounded-xl shadow-sm border border-slate-200 w-fit">
               <div className="flex items-center gap-1.5 sm:gap-2">
-                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-500 rounded-full"></div>
-                <span className="text-xs sm:text-sm text-slate-600">Live Data</span>
+                <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                <span className="text-xs sm:text-sm text-slate-600 font-medium">Live Data</span>
               </div>
               {soundEnabled && overdueInvoices.length > 0 && (
                 <Volume2 className="w-4 h-4 text-emerald-600" />
@@ -405,84 +438,84 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Stats Cards Grid - Main 4 cards */}
+        {/* Main Stats Cards - 4 columns */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
           
           {/* Total Clients Card */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow">
             <div className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-start justify-between mb-3 sm:mb-4">
-                <div className="p-2 sm:p-2.5 lg:p-3 bg-blue-50 rounded-lg sm:rounded-xl">
+                <div className="p-2 sm:p-2.5 lg:p-3 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg sm:rounded-xl">
                   <Users className="w-5 h-5 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-blue-600" />
                 </div>
-                <span className="text-[10px] sm:text-xs font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md">
+                <span className="text-[10px] sm:text-xs font-semibold text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
                   ACTIVE
                 </span>
               </div>
               <div>
-                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-0.5 sm:mb-1">Total Clients</p>
-                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-1 sm:mb-2">{stats.totalClients}</p>
-                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-500">
+                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-1">Total Clients</p>
+                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-2">{stats.totalClients}</p>
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-500">
                   <Users className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                   <span>Customer base</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 sm:h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+            <div className="h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
           </div>
 
           {/* Total Invoiced Card */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow">
             <div className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-start justify-between mb-3 sm:mb-4">
-                <div className="p-2 sm:p-2.5 lg:p-3 bg-emerald-50 rounded-lg sm:rounded-xl">
+                <div className="p-2 sm:p-2.5 lg:p-3 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-lg sm:rounded-xl">
                   <FileText className="w-5 h-5 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-emerald-600" />
                 </div>
-                <span className="text-[10px] sm:text-xs font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md">
+                <span className="text-[10px] sm:text-xs font-semibold text-emerald-600 bg-emerald-50 px-2 py-1 rounded-full">
                   TOTAL
                 </span>
               </div>
               <div>
-                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-0.5 sm:mb-1">Total Invoiced</p>
-                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-1 sm:mb-2 truncate">
+                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-1">Total Invoiced</p>
+                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-2 truncate">
                   {formatCurrency(stats.totalInvoiced)}
                 </p>
-                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-500">
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-500">
                   <FileText className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span className="truncate">{invoices.length} invoices generated</span>
+                  <span className="truncate">{invoices.length} invoices</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 sm:h-1 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
+            <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600"></div>
           </div>
 
           {/* Total Collected Card */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow">
             <div className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-start justify-between mb-3 sm:mb-4">
-                <div className="p-2 sm:p-2.5 lg:p-3 bg-violet-50 rounded-lg sm:rounded-xl">
+                <div className="p-2 sm:p-2.5 lg:p-3 bg-gradient-to-br from-violet-50 to-violet-100 rounded-lg sm:rounded-xl">
                   <Wallet className="w-5 h-5 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-violet-600" />
                 </div>
-                <span className="text-[10px] sm:text-xs font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md">
+                <span className="text-[10px] sm:text-xs font-semibold text-violet-600 bg-violet-50 px-2 py-1 rounded-full">
                   {collectionRate}%
                 </span>
               </div>
               <div>
-                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-0.5 sm:mb-1">Total Collected</p>
-                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-1 sm:mb-2 truncate">
+                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-1">Total Collected</p>
+                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-2 truncate">
                   {formatCurrency(stats.totalCollected)}
                 </p>
-                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-500">
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-500">
                   <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span className="truncate">{invoices.filter(inv => inv.status === 'paid' || inv.status === 'partial').length} payments received</span>
+                  <span className="truncate">{invoices.filter(inv => inv.status === 'paid' || inv.status === 'partial').length} received</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 sm:h-1 bg-gradient-to-r from-violet-500 to-violet-600"></div>
+            <div className="h-1 bg-gradient-to-r from-violet-500 to-violet-600"></div>
           </div>
 
           {/* Outstanding Card */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden relative">
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow relative">
             {unpaidInvoices.length > 0 && (
               <div className="absolute top-2 right-2 sm:top-3 sm:right-3">
                 <div className="w-2 h-2 sm:w-2.5 sm:h-2.5 bg-rose-500 rounded-full animate-pulse"></div>
@@ -490,70 +523,75 @@ export default function Dashboard() {
             )}
             <div className="p-4 sm:p-5 lg:p-6">
               <div className="flex items-start justify-between mb-3 sm:mb-4">
-                <div className="p-2 sm:p-2.5 lg:p-3 bg-rose-50 rounded-lg sm:rounded-xl">
+                <div className="p-2 sm:p-2.5 lg:p-3 bg-gradient-to-br from-rose-50 to-rose-100 rounded-lg sm:rounded-xl">
                   <AlertCircle className="w-5 h-5 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-rose-600" />
                 </div>
-                <span className="text-[10px] sm:text-xs font-medium text-slate-500 bg-slate-100 px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-md">
+                <span className="text-[10px] sm:text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full">
                   PENDING
                 </span>
               </div>
               <div>
-                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-0.5 sm:mb-1">Outstanding</p>
-                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-1 sm:mb-2 truncate">
+                <p className="text-xs sm:text-sm font-medium text-slate-600 mb-1">Outstanding</p>
+                <p className="text-2xl sm:text-2xl lg:text-3xl font-bold text-slate-800 mb-2 truncate">
                   {formatCurrency(stats.outstanding)}
                 </p>
-                <div className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-500">
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-slate-500">
                   <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
-                  <span className="truncate">{unpaidInvoices.length} awaiting payment</span>
+                  <span className="truncate">{unpaidInvoices.length} pending</span>
                 </div>
               </div>
             </div>
-            <div className="h-0.5 sm:h-1 bg-gradient-to-r from-rose-500 to-rose-600"></div>
+            <div className="h-1 bg-gradient-to-r from-rose-500 to-rose-600"></div>
           </div>
         </div>
 
-        {/* Debit/Credit Breakdown Section - NEW */}
+        {/* Debit/Credit Breakdown Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
           {/* Debit Bills Card */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 lg:p-5 border-b border-slate-200">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow">
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 p-3 sm:p-4 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="p-2 bg-red-100 rounded-lg">
+                    <TrendingDown className="w-5 h-5 sm:w-6 sm:h-6 text-red-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-800">Debit Bills</h3>
+                    <p className="text-xs text-slate-600">{debitInvoiceCount} invoice{debitInvoiceCount !== 1 ? 's' : ''}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-800">Debit Bills</h3>
-                  <p className="text-xs text-slate-600">{debitInvoiceCount} invoice{debitInvoiceCount !== 1 ? 's' : ''}</p>
+                <div className="text-xs font-semibold text-red-600 bg-red-100 px-2 py-1 rounded-full">
+                  PAYABLE
                 </div>
               </div>
             </div>
             <div className="p-4 sm:p-5 lg:p-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs sm:text-sm text-slate-600 mb-1 sm:mb-2">Total Invoiced</p>
-                  <p className="text-lg sm:text-xl lg:text-2xl font-bold text-blue-600">
+                  <p className="text-lg sm:text-xl lg:text-2xl font-bold text-red-600">
                     {formatCurrency(stats.debitInvoiced)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs sm:text-sm text-slate-600 mb-1 sm:mb-2">Collected</p>
+                  <p className="text-xs sm:text-sm text-slate-600 mb-1 sm:mb-2">Paid</p>
                   <p className="text-lg sm:text-xl lg:text-2xl font-bold text-emerald-600">
                     {formatCurrency(stats.debitCollected)}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-slate-600">Collection Rate</span>
+              <div className="pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between text-xs sm:text-sm mb-2">
+                  <span className="text-slate-600 font-medium">Payment Progress</span>
                   <span className="font-bold text-slate-800">
                     {stats.debitInvoiced > 0 
                       ? ((stats.debitCollected / stats.debitInvoiced) * 100).toFixed(1) 
                       : 0}%
                   </span>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
+                <div className="w-full bg-slate-200 rounded-full h-2.5">
                   <div 
-                    className="bg-gradient-to-r from-blue-500 to-emerald-500 h-2 rounded-full transition-all"
+                    className="bg-gradient-to-r from-red-500 to-emerald-500 h-2.5 rounded-full transition-all duration-500"
                     style={{ 
                       width: stats.debitInvoiced > 0 
                         ? `${Math.min(100, (stats.debitCollected / stats.debitInvoiced) * 100)}%` 
@@ -563,49 +601,54 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            <div className="h-0.5 sm:h-1 bg-gradient-to-r from-blue-500 to-blue-600"></div>
+            <div className="h-1 bg-gradient-to-r from-red-500 to-red-600"></div>
           </div>
 
           {/* Credit Bills Card */}
-          <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-gradient-to-r from-purple-50 to-violet-50 p-3 sm:p-4 lg:p-5 border-b border-slate-200">
-              <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <CreditCard className="w-5 h-5 sm:w-6 sm:h-6 text-purple-600" />
+          <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden hover:shadow-xl transition-shadow">
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 p-3 sm:p-4 border-b border-slate-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <div className="p-2 bg-green-100 rounded-lg">
+                    <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-green-600" />
+                  </div>
+                  <div>
+                    <h3 className="text-base sm:text-lg font-bold text-slate-800">Credit Bills</h3>
+                    <p className="text-xs text-slate-600">{creditInvoiceCount} invoice{creditInvoiceCount !== 1 ? 's' : ''}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-base sm:text-lg font-bold text-slate-800">Credit Bills</h3>
-                  <p className="text-xs text-slate-600">{creditInvoiceCount} invoice{creditInvoiceCount !== 1 ? 's' : ''}</p>
+                <div className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                  RECEIVABLE
                 </div>
               </div>
             </div>
             <div className="p-4 sm:p-5 lg:p-6">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4 mb-4">
                 <div>
                   <p className="text-xs sm:text-sm text-slate-600 mb-1 sm:mb-2">Total Invoiced</p>
-                  <p className="text-lg sm:text-xl lg:text-2xl font-bold text-purple-600">
+                  <p className="text-lg sm:text-xl lg:text-2xl font-bold text-green-600">
                     {formatCurrency(stats.creditInvoiced)}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs sm:text-sm text-slate-600 mb-1 sm:mb-2">Collected</p>
+                  <p className="text-xs sm:text-sm text-slate-600 mb-1 sm:mb-2">Received</p>
                   <p className="text-lg sm:text-xl lg:text-2xl font-bold text-emerald-600">
                     {formatCurrency(stats.creditCollected)}
                   </p>
                 </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-slate-200">
-                <div className="flex items-center justify-between text-xs sm:text-sm">
-                  <span className="text-slate-600">Collection Rate</span>
+              <div className="pt-4 border-t border-slate-200">
+                <div className="flex items-center justify-between text-xs sm:text-sm mb-2">
+                  <span className="text-slate-600 font-medium">Collection Progress</span>
                   <span className="font-bold text-slate-800">
                     {stats.creditInvoiced > 0 
                       ? ((stats.creditCollected / stats.creditInvoiced) * 100).toFixed(1) 
                       : 0}%
                   </span>
                 </div>
-                <div className="w-full bg-slate-200 rounded-full h-2 mt-2">
+                <div className="w-full bg-slate-200 rounded-full h-2.5">
                   <div 
-                    className="bg-gradient-to-r from-purple-500 to-emerald-500 h-2 rounded-full transition-all"
+                    className="bg-gradient-to-r from-green-500 to-emerald-500 h-2.5 rounded-full transition-all duration-500"
                     style={{ 
                       width: stats.creditInvoiced > 0 
                         ? `${Math.min(100, (stats.creditCollected / stats.creditInvoiced) * 100)}%` 
@@ -615,33 +658,30 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-            <div className="h-0.5 sm:h-1 bg-gradient-to-r from-purple-500 to-purple-600"></div>
+            <div className="h-1 bg-gradient-to-r from-green-500 to-green-600"></div>
           </div>
         </div>
 
         {/* Quick Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 lg:p-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6 mb-4 sm:mb-6 lg:mb-8">
+          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-1.5 sm:p-2 bg-blue-50 rounded-md sm:rounded-lg">
-                  <PieChart className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+                <div className="p-1.5 sm:p-2 bg-blue-50 rounded-lg">
+                  <Percent className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs text-slate-500 font-medium">Collection Rate</p>
                   <p className="text-lg sm:text-xl font-bold text-slate-800">{collectionRate}%</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] sm:text-xs text-slate-500">of total invoiced</p>
-              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 lg:p-5">
+          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-1.5 sm:p-2 bg-emerald-50 rounded-md sm:rounded-lg">
+                <div className="p-1.5 sm:p-2 bg-emerald-50 rounded-lg">
                   <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-600" />
                 </div>
                 <div>
@@ -651,17 +691,14 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] sm:text-xs text-slate-500">per invoice</p>
-              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 lg:p-5 sm:col-span-2 lg:col-span-1">
+          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 hover:shadow-md transition-shadow">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 sm:gap-3">
-                <div className="p-1.5 sm:p-2 bg-violet-50 rounded-md sm:rounded-lg">
-                  <TrendingUp className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600" />
+                <div className="p-1.5 sm:p-2 bg-violet-50 rounded-lg">
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5 text-violet-600" />
                 </div>
                 <div>
                   <p className="text-[10px] sm:text-xs text-slate-500 font-medium">Paid Invoices</p>
@@ -670,32 +707,99 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-[10px] sm:text-xs text-slate-500">completed</p>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-lg sm:rounded-xl shadow-sm border border-slate-200 p-3.5 sm:p-4 hover:shadow-md transition-shadow">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 sm:gap-3">
+                <div className="p-1.5 sm:p-2 bg-slate-50 rounded-lg">
+                  <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-slate-600" />
+                </div>
+                <div>
+                  <p className="text-[10px] sm:text-xs text-slate-500 font-medium">Untyped Bills</p>
+                  <p className="text-lg sm:text-xl font-bold text-slate-800">
+                    {noneInvoiceCount}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Recent Invoices Section Placeholder */}
-        <div className="bg-white rounded-xl sm:rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-          <div className="bg-gradient-to-r from-slate-50 to-blue-50 p-4 sm:p-5 lg:p-6 border-b border-slate-200">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <h2 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2">
-                  <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
-                  Recent Invoices
-                </h2>
-                <p className="text-xs sm:text-sm text-slate-600 mt-0.5 sm:mt-1">Latest invoice records</p>
+        {/* Recent Invoices Section */}
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="bg-gradient-to-r from-slate-50 to-blue-50 p-3 sm:p-4 border-b border-slate-200">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-base sm:text-lg font-bold text-slate-800 flex items-center gap-2">
+                <FileText className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
+                Recent Invoices
+              </h2>
+              <div className="text-xs text-slate-600 bg-white px-2.5 py-1 rounded-lg border border-slate-200">
+                {invoices.length} total
               </div>
             </div>
           </div>
 
-          <div className="p-6 text-center text-slate-500">
+          <div className="divide-y divide-slate-200">
             {invoices.length === 0 ? (
-              <p>No invoices yet</p>
+              <div className="p-8 text-center">
+                <FileText className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                <p className="text-slate-500 font-medium text-sm">No invoices yet</p>
+                <p className="text-xs text-slate-400 mt-1">Create your first invoice to get started</p>
+              </div>
             ) : (
-              <p>{invoices.length} total invoices</p>
+              <>
+                {recentInvoices.map(invoice => {
+                  const client = clients.find(c => c.id === invoice.clientId);
+                  const amount = invoice.total || invoice.subtotal || invoice.amount || 0;
+                  
+                  return (
+                    <div key={invoice.id} className="p-3 sm:p-3.5 hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          <div className="w-9 h-9 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-sm font-bold text-blue-600">
+                              {client?.name?.charAt(0) || 'N'}
+                            </span>
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-sm text-slate-800 truncate">
+                              {client?.name || 'Unknown Client'}
+                            </p>
+                            <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                              <p className="text-xs text-slate-600">
+                                #{invoice.invoiceNumber}
+                              </p>
+                              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold border ${getStatusColor(invoice.status)}`}>
+                                {getStatusIcon(invoice.status)}
+                                {invoice.status}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className="font-bold text-sm text-slate-800">
+                            {formatCurrency(amount)}
+                          </p>
+                          <p className="text-xs text-slate-500">
+                            {invoice.date || 'No date'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                
+                {invoices.length > 5 && (
+                  <div className="p-2.5 text-center bg-slate-50">
+                    <p className="text-xs text-slate-600">
+                      Showing 5 of {invoices.length} • 
+                      <span className="font-semibold text-blue-600 ml-1">View all</span>
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
