@@ -61,6 +61,12 @@ export default function InvoiceManagement() {
 
     const unsubInvoices = onSnapshot(collection(db, 'invoices'), (s) => {
       const invoicesData = s.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Sort by createdAt descending — newest entry appears at the top
+      invoicesData.sort((a, b) => {
+        const aTime = a.createdAt?.seconds ?? 0;
+        const bTime = b.createdAt?.seconds ?? 0;
+        return bTime - aTime;
+      });
       setInvoices(invoicesData);
       if (activeTab === 'calendar' && selectedDate) {
         filterInvoicesByDate(selectedDate, invoicesData);
