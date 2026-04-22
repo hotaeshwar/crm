@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, updateDoc, query, where, getDocs } from 'firebase/firestore';
 import jsPDF from 'jspdf';
@@ -76,6 +76,15 @@ export default function InvoiceManagement() {
   const [loadingArchive, setLoadingArchive] = useState(false);
   const [archiveSearchTerm, setArchiveSearchTerm] = useState('');
   const [archiveStatusFilter, setArchiveStatusFilter] = useState('all');
+
+  // Sorted clients for dropdown
+  const sortedClients = useMemo(() => {
+    return [...clients].sort((a, b) => {
+      const nameA = (a.company || a.name || '').toLowerCase();
+      const nameB = (b.company || b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [clients]);
 
   useEffect(() => {
     const unsubClients = onSnapshot(collection(db, 'clients'), (s) => {
@@ -1292,7 +1301,7 @@ export default function InvoiceManagement() {
                       required
                     >
                       <option value="">Select Client</option>
-                      {clients.map(c => (
+                      {sortedClients.map(c => (
                         <option key={c.id} value={c.id}>
                           {c.company || c.name}
                         </option>
@@ -1690,10 +1699,10 @@ export default function InvoiceManagement() {
                                   )}
                                 </div>
                               )}
-                            </td>
+                             </td>
                             <td className="px-4 py-3 text-xs sm:text-sm font-semibold text-slate-800">
                               {formatAmountWithCurrency(isEditing ? calculateTotalAmount(editForm.selectedServices) : (invoice.subtotal || invoice.amount))}
-                            </td>
+                             </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <input
@@ -1708,7 +1717,7 @@ export default function InvoiceManagement() {
                                   {isNA(invoice.taxPercentage) ? 'N/A' : (invoice.taxPercentage ? `${invoice.taxPercentage}%` : '0%')}
                                 </div>
                               )}
-                            </td>
+                             </td>
                             <td className="px-4 py-3 text-xs sm:text-sm font-bold text-blue-600">
                               {isEditing ? (
                                 <span>
@@ -1720,7 +1729,7 @@ export default function InvoiceManagement() {
                               ) : (
                                 formatAmountWithCurrency(invoice.total || invoice.amount)
                               )}
-                            </td>
+                             </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <div>
@@ -1761,7 +1770,7 @@ export default function InvoiceManagement() {
                                   )}
                                 </div>
                               )}
-                            </td>
+                             </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <select
@@ -1779,7 +1788,7 @@ export default function InvoiceManagement() {
                                   {invoice.status || 'unpaid'}
                                 </span>
                               )}
-                            </td>
+                             </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <div className="flex gap-1">
@@ -1823,8 +1832,8 @@ export default function InvoiceManagement() {
                                   </button>
                                 </div>
                               )}
-                            </td>
-                          </tr>
+                             </td>
+                           </tr>
                         );
                       })
                     )}

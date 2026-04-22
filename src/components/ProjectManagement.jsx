@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { db } from '../firebase';
 import {
   collection, addDoc, updateDoc, deleteDoc,
@@ -22,7 +22,7 @@ export default function ClientAdManagement() {
   const [expandedId, setExpandedId] = useState(null);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState(null); // { type: 'success'|'error', msg: string }
+  const [toast, setToast] = useState(null);
   
   // Reminder states
   const [showReminders, setShowReminders] = useState(true);
@@ -30,6 +30,15 @@ export default function ClientAdManagement() {
   const [ongoingCampaigns, setOngoingCampaigns] = useState([]);
   const audioContextRef = useRef(null);
   const hasPlayedSound = useRef(false);
+
+  // Sorted clients for dropdown
+  const sortedClients = useMemo(() => {
+    return [...clients].sort((a, b) => {
+      const nameA = (a.company || a.name || '').toLowerCase();
+      const nameB = (b.company || b.name || '').toLowerCase();
+      return nameA.localeCompare(nameB);
+    });
+  }, [clients]);
 
   const emptyForm = {
     clientId: '',
@@ -606,7 +615,7 @@ export default function ClientAdManagement() {
                     required
                   >
                     <option value="">Select Client</option>
-                    {clients.map(c => (
+                    {sortedClients.map(c => (
                       <option key={c.id} value={c.id}>{c.company || c.name}</option>
                     ))}
                   </select>
@@ -839,14 +848,14 @@ export default function ClientAdManagement() {
                           <td className="px-4 py-3">
                             <div className="font-bold text-slate-800 text-sm">{p.projectName}</div>
                             <div className="text-xs text-slate-400">{p.projectNumber}</div>
-                          </td>
+                           </td>
                           <td className="px-4 py-3">
                             <div className="font-semibold text-slate-700 text-sm">{client?.name || '—'}</div>
                             <div className="text-xs text-slate-400">{client?.company || ''}</div>
-                          </td>
+                           </td>
                           <td className="px-4 py-3 text-xs text-slate-600 font-medium whitespace-nowrap">
                             {p.startDate || '—'}
-                          </td>
+                           </td>
                           <td className="px-4 py-3 text-xs whitespace-nowrap">
                             {p.endDate ? (
                               <span className="text-slate-600 font-medium">{p.endDate}</span>
@@ -859,28 +868,28 @@ export default function ClientAdManagement() {
                             {days && (
                               <div className="text-slate-400 mt-0.5">{days}d</div>
                             )}
-                          </td>
+                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-slate-700">
                             {p.budgetPerDay ? `₹${fmt(p.budgetPerDay)}` : '—'}
-                          </td>
+                           </td>
                           <td className="px-4 py-3 text-sm font-semibold text-slate-800">₹{fmt(totalCost)}</td>
                           <td className="px-4 py-3 text-sm text-slate-600">
                             {p.gst ? `${p.gst}%` : '—'}
-                          </td>
+                           </td>
                           <td className="px-4 py-3 text-sm font-bold text-orange-600">₹{fmt(grandTotal)}</td>
                           <td className="px-4 py-3">
                             <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${s.badge}`}>
                               <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
                               {s.label}
                             </span>
-                           </td>
+                            </td>
                           <td className="px-4 py-3">
                             <div className="flex gap-1">
                               <button onClick={() => handleEdit(p)} className="p-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-lg transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
                               <button onClick={() => downloadBill(p)} className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 rounded-lg transition-colors" title="Download Invoice"><Download className="w-3.5 h-3.5" /></button>
                               <button onClick={() => handleDelete(p.id)} className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                             </div>
-                           </td>
+                            </td>
                         </tr>
                       );
                     })}
