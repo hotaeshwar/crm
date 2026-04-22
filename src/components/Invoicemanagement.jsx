@@ -19,7 +19,7 @@ const Toast = ({ message, type, onClose }) => {
     <div className={`fixed bottom-4 right-4 z-50 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right-5`}>
       {type === 'success' && <CheckCircle className="w-5 h-5" />}
       {type === 'error' && <AlertCircle className="w-5 h-5" />}
-      {type === 'info' && <Info className="w-5 h-5" />}
+      {type === 'info' && <AlertCircle className="w-5 h-5" />}
       <span className="text-sm font-medium">{message}</span>
     </div>
   );
@@ -289,6 +289,11 @@ export default function InvoiceManagement() {
   const handleDateClick = (date) => {
     setSelectedDate(date);
     filterInvoicesByDate(date);
+  };
+
+  const closeCalendarDetails = () => {
+    setSelectedDate(null);
+    setFilteredInvoices([]);
   };
 
   const renderMonthlyCalendar = () => {
@@ -1080,6 +1085,14 @@ export default function InvoiceManagement() {
     setSelectedArchiveMonth(archive.monthName);
     setSelectedArchiveYear(archive.year);
     setArchiveInvoices(archive.invoices || []);
+  };
+
+  const hideArchiveMonth = () => {
+    setSelectedArchiveMonth(null);
+    setSelectedArchiveYear(null);
+    setArchiveInvoices([]);
+    setArchiveSearchTerm('');
+    setArchiveStatusFilter('all');
   };
 
   const filterArchivedInvoices = () => {
@@ -2301,7 +2314,13 @@ export default function InvoiceManagement() {
                       <h3 className="text-lg font-bold text-slate-800">{selectedDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</h3>
                       <p className="text-sm text-slate-600">{filteredInvoices.length} invoice{filteredInvoices.length !== 1 ? 's' : ''} found</p>
                     </div>
-                    {/* Filter option removed as requested */}
+                    <button
+                      onClick={closeCalendarDetails}
+                      className="p-2 hover:bg-white rounded-lg transition-colors text-slate-500 hover:text-slate-700"
+                      title="Close"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
                   </div>
                 </div>
                 
@@ -2309,7 +2328,14 @@ export default function InvoiceManagement() {
                   <div className="overflow-x-auto">
                     <table className="w-full">
                       <thead className="bg-slate-50">
-                        <tr><th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Invoice #</th><th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Client</th><th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Bill Type</th><th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Amount</th><th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Status</th><th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Actions</th></tr>
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Invoice #</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Client</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Bill Type</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Amount</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Status</th>
+                          <th className="px-4 py-3 text-left text-xs font-bold text-slate-700">Actions</th>
+                        </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-200">
                         {filteredInvoices.map(invoice => {
@@ -2365,61 +2391,71 @@ export default function InvoiceManagement() {
               <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-12 text-center"><Archive className="w-16 h-16 text-slate-300 mx-auto mb-4" /><h3 className="text-lg font-bold text-slate-700 mb-2">No Archived Data</h3><p className="text-sm text-slate-500 max-w-md mx-auto">No archived invoices found in Firebase. Click the "Archive Now" button to archive previous month's data.</p></div>
             ) : (
               <div className="space-y-4">
-                {archivedInvoices.map((archive) => (
-                  <div key={archive.id} className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-                    <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-4 sm:p-5">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                        <div><h3 className="text-xl sm:text-2xl font-bold text-white mb-1">{archive.monthName} {archive.year}</h3><p className="text-purple-100 text-xs sm:text-sm">Archived: {archive.archivedDate ? new Date(archive.archivedDate.seconds * 1000).toLocaleDateString() : 'N/A'}</p></div>
-                        <div className="flex gap-2">
-                          <button onClick={() => exportToExcel(archive.invoices || [], `archived_${archive.monthName}_${archive.year}`)} className="px-3 py-1.5 bg-white/20 backdrop-blur text-white rounded-lg hover:bg-white/30 transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium"><FileSpreadsheet className="w-4 h-4" />Export Excel</button>
-                          <button onClick={() => viewArchiveMonth(archive)} className={`px-3 py-1.5 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium ${selectedArchiveMonth === archive.monthName && selectedArchiveYear === archive.year ? 'ring-2 ring-white ring-offset-2 ring-offset-purple-600' : ''}`}><Eye className="w-4 h-4" />{selectedArchiveMonth === archive.monthName && selectedArchiveYear === archive.year ? 'Hide' : 'View'}</button>
+                {archivedInvoices.map((archive) => {
+                  const isSelected = selectedArchiveMonth === archive.monthName && selectedArchiveYear === archive.year;
+                  return (
+                    <div key={archive.id} className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                      <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-4 sm:p-5">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                          <div><h3 className="text-xl sm:text-2xl font-bold text-white mb-1">{archive.monthName} {archive.year}</h3><p className="text-purple-100 text-xs sm:text-sm">Archived: {archive.archivedDate ? new Date(archive.archivedDate.seconds * 1000).toLocaleDateString() : 'N/A'}</p></div>
+                          <div className="flex gap-2">
+                            <button onClick={() => exportToExcel(archive.invoices || [], `archived_${archive.monthName}_${archive.year}`)} className="px-3 py-1.5 bg-white/20 backdrop-blur text-white rounded-lg hover:bg-white/30 transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium"><FileSpreadsheet className="w-4 h-4" />Export Excel</button>
+                            <button
+                              onClick={() => isSelected ? hideArchiveMonth() : viewArchiveMonth(archive)}
+                              className={`px-3 py-1.5 bg-white text-purple-600 rounded-lg hover:bg-purple-50 transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium ${isSelected ? 'ring-2 ring-white ring-offset-2 ring-offset-purple-600' : ''}`}
+                            >
+                              <Eye className="w-4 h-4" />
+                              {isSelected ? 'Hide' : 'View'}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-4">
+                          <div className="bg-white/10 backdrop-blur rounded-lg p-2 sm:p-3"><div className="text-white/80 text-[10px] sm:text-xs">Invoices</div><div className="text-lg sm:text-xl font-bold text-white">{archive.invoiceCount || (archive.invoices?.length || 0)}</div></div>
+                          <div className="bg-white/10 backdrop-blur rounded-lg p-2 sm:p-3"><div className="text-white/80 text-[10px] sm:text-xs">Total Amount</div><div className="text-lg sm:text-xl font-bold text-white">₹{formatAmount(archive.totalAmount || 0)}</div></div>
+                          <div className="bg-white/10 backdrop-blur rounded-lg p-2 sm:p-3"><div className="text-white/80 text-[10px] sm:text-xs">Firebase ID</div><div className="text-xs sm:text-sm font-bold text-white truncate" title={archive.id}>{archive.id.substring(0, 8)}...</div></div>
                         </div>
                       </div>
-                      <div className="grid grid-cols-3 gap-3 sm:gap-4 mt-4">
-                        <div className="bg-white/10 backdrop-blur rounded-lg p-2 sm:p-3"><div className="text-white/80 text-[10px] sm:text-xs">Invoices</div><div className="text-lg sm:text-xl font-bold text-white">{archive.invoiceCount || (archive.invoices?.length || 0)}</div></div>
-                        <div className="bg-white/10 backdrop-blur rounded-lg p-2 sm:p-3"><div className="text-white/80 text-[10px] sm:text-xs">Total Amount</div><div className="text-lg sm:text-xl font-bold text-white">₹{formatAmount(archive.totalAmount || 0)}</div></div>
-                        <div className="bg-white/10 backdrop-blur rounded-lg p-2 sm:p-3"><div className="text-white/80 text-[10px] sm:text-xs">Firebase ID</div><div className="text-xs sm:text-sm font-bold text-white truncate" title={archive.id}>{archive.id.substring(0, 8)}...</div></div>
-                      </div>
-                    </div>
-                    
-                    {selectedArchiveMonth === archive.monthName && selectedArchiveYear === archive.year && (
-                      <div className="p-4 sm:p-5 border-t border-slate-200">
-                        <h4 className="text-sm sm:text-base font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText className="w-4 h-4 text-purple-600" />Invoices from {archive.monthName} {archive.year}</h4>
-                        
-                        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-                          <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" placeholder="Search invoices..." value={archiveSearchTerm} onChange={(e) => setArchiveSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" /></div>
-                          <select value={archiveStatusFilter} onChange={(e) => setArchiveStatusFilter(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"><option value="all">All Status</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option><option value="partial">Partial</option></select>
-                        </div>
-                        
-                        <div className="hidden md:block overflow-x-auto">
-                          <table className="w-full"><thead className="bg-slate-50"><tr><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Invoice #</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Client</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Date</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Bill Type</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Total</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Status</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Actions</th></tr></thead>
-                          <tbody className="divide-y divide-slate-200">
+                      
+                      {isSelected && (
+                        <div className="p-4 sm:p-5 border-t border-slate-200">
+                          <h4 className="text-sm sm:text-base font-bold text-slate-800 mb-3 flex items-center gap-2"><FileText className="w-4 h-4 text-purple-600" />Invoices from {archive.monthName} {archive.year}</h4>
+                          
+                          <div className="flex flex-col sm:flex-row gap-3 mb-4">
+                            <div className="flex-1 relative"><Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" /><input type="text" placeholder="Search invoices..." value={archiveSearchTerm} onChange={(e) => setArchiveSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent" /></div>
+                            <select value={archiveStatusFilter} onChange={(e) => setArchiveStatusFilter(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"><option value="all">All Status</option><option value="paid">Paid</option><option value="unpaid">Unpaid</option><option value="partial">Partial</option></select>
+                          </div>
+                          
+                          <div className="hidden md:block overflow-x-auto">
+                            <table className="w-full"><thead className="bg-slate-50"><tr><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Invoice #</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Client</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Date</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Bill Type</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Total</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Status</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Actions</th></tr></thead>
+                              <tbody className="divide-y divide-slate-200">
+                                {filterArchivedInvoices().map((inv, idx) => {
+                                  const client = clients.find(c => c.id === inv.clientId);
+                                  const rowBg = inv.billType === 'debit' ? 'bg-red-50' : inv.billType === 'credit' ? 'bg-green-50' : '';
+                                  return (<tr key={idx} className={`hover:opacity-80 transition-opacity ${rowBg}`}><td className="px-4 py-3 text-xs font-bold text-slate-800">{inv.invoiceNumber}</td><td className="px-4 py-3 text-xs text-slate-600">{client?.name || 'N/A'}</td><td className="px-4 py-3 text-xs text-slate-600">{inv.date}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${getBillTypeColor(inv.billType || 'none')}`}>{getBillTypeIcon(inv.billType || 'none')}{(inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1)}</span></td><td className={`px-4 py-3 text-xs font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></td><td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200" title="Restore to main invoices"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200" title="Delete from archive"><Trash2 className="w-4 h-4" /></button></div></td></tr>);
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                          
+                          <div className="md:hidden space-y-3">
                             {filterArchivedInvoices().map((inv, idx) => {
                               const client = clients.find(c => c.id === inv.clientId);
-                              const rowBg = inv.billType === 'debit' ? 'bg-red-50' : inv.billType === 'credit' ? 'bg-green-50' : '';
-                              return (<tr key={idx} className={`hover:opacity-80 transition-opacity ${rowBg}`}><td className="px-4 py-3 text-xs font-bold text-slate-800">{inv.invoiceNumber}</td><td className="px-4 py-3 text-xs text-slate-600">{client?.name || 'N/A'}</td><td className="px-4 py-3 text-xs text-slate-600">{inv.date}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${getBillTypeColor(inv.billType || 'none')}`}>{getBillTypeIcon(inv.billType || 'none')}{(inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1)}</span></td><td className={`px-4 py-3 text-xs font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></td><td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200" title="Restore to main invoices"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200" title="Delete from archive"><Trash2 className="w-4 h-4" /></button></div></td></tr>);
+                              const cardBorder = inv.billType === 'debit' ? 'border-red-200 bg-red-50' : inv.billType === 'credit' ? 'border-green-200 bg-green-50' : 'border-slate-200';
+                              return (<div key={idx} className={`rounded-lg p-3 border ${cardBorder}`}><div className="flex justify-between items-start mb-2"><div><div className="text-xs text-slate-500">Invoice #</div><div className="text-sm font-bold text-slate-800">{inv.invoiceNumber}</div></div><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></div><div className="grid grid-cols-2 gap-2 mb-2"><div><div className="text-xs text-slate-500">Client</div><div className="text-sm font-semibold text-slate-700">{client?.name || 'N/A'}</div></div><div><div className="text-xs text-slate-500">Date</div><div className="text-sm text-slate-600">{inv.date}</div></div></div><div className="flex justify-between items-center pt-2 border-t border-slate-200"><div><div className="text-xs text-slate-500">Total</div><div className={`text-base font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</div></div><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Restore"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700" title="Delete"><Trash2 className="w-4 h-4" /></button></div></div></div>);
                             })}
-                          </tbody></table>
-                        </div>
-                        
-                        <div className="md:hidden space-y-3">
-                          {filterArchivedInvoices().map((inv, idx) => {
-                            const client = clients.find(c => c.id === inv.clientId);
-                            const cardBorder = inv.billType === 'debit' ? 'border-red-200 bg-red-50' : inv.billType === 'credit' ? 'border-green-200 bg-green-50' : 'border-slate-200';
-                            return (<div key={idx} className={`rounded-lg p-3 border ${cardBorder}`}><div className="flex justify-between items-start mb-2"><div><div className="text-xs text-slate-500">Invoice #</div><div className="text-sm font-bold text-slate-800">{inv.invoiceNumber}</div></div><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></div><div className="grid grid-cols-2 gap-2 mb-2"><div><div className="text-xs text-slate-500">Client</div><div className="text-sm font-semibold text-slate-700">{client?.name || 'N/A'}</div></div><div><div className="text-xs text-slate-500">Date</div><div className="text-sm text-slate-600">{inv.date}</div></div></div><div className="flex justify-between items-center pt-2 border-t border-slate-200"><div><div className="text-xs text-slate-500">Total</div><div className={`text-base font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</div></div><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Restore"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700" title="Delete"><Trash2 className="w-4 h-4" /></button></div></div></div>);
-                          })}
-                        </div>
-                        
-                        {filterArchivedInvoices().length > 0 && (
-                          <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
-                            <span className="text-sm text-slate-600">Showing {filterArchivedInvoices().length} of {archive.invoices?.length || 0} invoices</span>
-                            <button onClick={() => exportToExcel(filterArchivedInvoices(), `archived_${archive.monthName}_${archive.year}_filtered`)} className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg hover:from-emerald-700 hover:to-green-700 transition-all flex items-center gap-2 text-sm font-medium shadow-md"><Download className="w-4 h-4" />Export Filtered</button>
                           </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                          
+                          {filterArchivedInvoices().length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-slate-200 flex justify-between items-center">
+                              <span className="text-sm text-slate-600">Showing {filterArchivedInvoices().length} of {archive.invoices?.length || 0} invoices</span>
+                              <button onClick={() => exportToExcel(filterArchivedInvoices(), `archived_${archive.monthName}_${archive.year}_filtered`)} className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-lg hover:from-emerald-700 hover:to-green-700 transition-all flex items-center gap-2 text-sm font-medium shadow-md"><Download className="w-4 h-4" />Export Filtered</button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
