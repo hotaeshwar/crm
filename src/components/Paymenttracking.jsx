@@ -51,7 +51,16 @@ export default function PaymentTracking() {
     );
     const unsubInvoices = onSnapshot(
       collection(db, 'invoices'), 
-      (snapshot) => setInvoices(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (snapshot) => {
+        const invoicesData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Sort invoices by creation date (newest first)
+        invoicesData.sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
+          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
+          return dateB - dateA;
+        });
+        setInvoices(invoicesData);
+      },
       (err) => setError(err.message)
     );
     const unsubPayments = onSnapshot(
@@ -366,11 +375,31 @@ export default function PaymentTracking() {
     return true;
   });
 
-  const filteredInvoicesForDropdown = invoices.filter(invoice => {
-    if (billTypeFilter !== 'all' && invoice.billType !== billTypeFilter) return false;
-    if (statusFilter !== 'all' && invoice.status !== statusFilter) return false;
-    return true;
-  });
+  // MODIFIED: Filter invoices for dropdown - only show partial and unpaid invoices
+  // Also sort by recent invoices first
+  const filteredInvoicesForDropdown = invoices
+    .filter(invoice => {
+      // Only show invoices that are partial or unpaid
+      const status = invoice.status || 'unpaid';
+      if (status === 'paid') return false;
+      
+      // Apply bill type filter if selected
+      if (billTypeFilter !== 'all' && invoice.billType !== billTypeFilter) return false;
+      
+      // Apply status filter if selected (but paid invoices are already excluded)
+      if (statusFilter !== 'all' && statusFilter !== 'all') {
+        if (statusFilter === 'paid') return false; // Never show paid invoices in dropdown
+        if (statusFilter !== status) return false;
+      }
+      
+      return true;
+    })
+    .sort((a, b) => {
+      // Sort by created date (newest first)
+      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
+      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
+      return dateB - dateA;
+    });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
@@ -494,6 +523,9 @@ export default function PaymentTracking() {
                 {(billTypeFilter !== 'all' || statusFilter !== 'all') && (
                   <span className="text-[10px] sm:text-xs text-slate-500 ml-1">(filtered)</span>
                 )}
+                <span className="text-amber-600 ml-2 text-[10px] sm:text-xs font-normal">
+                  (Only Partial &amp; Unpaid shown)
+                </span>
               </label>
 
               <div className="relative">
@@ -530,7 +562,7 @@ export default function PaymentTracking() {
                 {showInvoiceDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 sm:max-h-60 overflow-y-auto">
                     <div className="p-2 bg-slate-50 border-b sticky top-0">
-                      <div className="text-[10px] sm:text-xs font-semibold text-slate-700">Available Invoices</div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-slate-700">Available Invoices (Partial &amp; Unpaid Only)</div>
                     </div>
                     {filteredInvoicesForDropdown.length > 0 ? (
                       filteredInvoicesForDropdown.map((invoice) => {
@@ -588,13 +620,16 @@ export default function PaymentTracking() {
                         );
                       })
                     ) : (
-                      <div className="px-3 py-2 text-xs sm:text-sm text-slate-500">No invoices found matching filters</div>
+                      <div className="px-3 py-4 text-xs sm:text-sm text-slate-500 text-center">
+                        <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-400" />
+                        No partial or unpaid invoices found
+                      </div>
                     )}
                   </div>
                 )}
               </div>
 
-              {form.invoiceId && selectedInvoice && (
+              {form.invoiceId && selectedInvoice && paymentStatus && paymentStatus !== 'paid' && (
                 <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div>
@@ -681,8 +716,8 @@ export default function PaymentTracking() {
             </div>
           </div>
 
-          {/* Invoice & Payment Details preview card */}
-          {form.invoiceId && selectedInvoice && (
+          {/* Invoice & Payment Details preview card - Only show for non-paid invoices */}
+          {form.invoiceId && selectedInvoice && paymentStatus && paymentStatus !== 'paid' && (
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-br from-slate-50 to-indigo-50 rounded-lg sm:rounded-xl border border-slate-200">
               <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
@@ -809,17 +844,17 @@ export default function PaymentTracking() {
                               {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
                             </span>
                           ) : <span className="text-xs text-slate-400">—</span>}
-                        </td>
+                        20</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(invStatus)}`}>
                             {getStatusIcon(invStatus)}{invStatus}
                           </span>
-                        </td>
+                        20</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className="text-base lg:text-lg font-semibold text-emerald-600">
                             ₹{payment.amount?.toLocaleString('en-IN')}
                           </span>
-                        </td>
+                        20</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           {invStatus === 'partial' ? (
                             <div>
@@ -835,13 +870,13 @@ export default function PaymentTracking() {
                           ) : (
                             <div className="text-xs text-rose-600 font-medium">No payments</div>
                           )}
-                        </td>
+                        20</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-slate-600 text-xs sm:text-sm">{payment.paymentDate}</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium border ${getMethodBadgeColor(payment.method)}`}>
                             {getMethodIcon(payment.method)}<span className="capitalize">{payment.method}</span>
                           </span>
-                        </td>
+                        20</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <div className="flex items-center gap-1.5 sm:gap-2">
                             <button onClick={() => handleEdit(payment)}
@@ -853,7 +888,7 @@ export default function PaymentTracking() {
                               <Trash2 className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
                             </button>
                           </div>
-                        </td>
+                        20</td>
                       </tr>
                     );
                   })
