@@ -187,15 +187,15 @@ export default function InvoiceManagement() {
         'Client Name': client?.name || 'N/A',
         'Client Company': client?.company || 'N/A',
         'Services': inv.service || '',
+        'Bill Type': (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1),
         'Subtotal': inv.subtotal || 0,
-        'Tax %': inv.taxPercentage || 0,
+        'Tax %': inv.taxPercentage === 'N/A' ? 'N/A' : (inv.taxPercentage || 0),
         'Tax Amount': inv.taxAmount || 0,
         'Total': inv.total || 0,
         'Status': inv.status,
         'Payment Days': inv.paymentDays || 30,
         'Amount Received': inv.amountReceived || 0,
         'Remaining Amount': inv.remainingAmount || 0,
-        'Bill Type': inv.billType || 'none',
         'Created At': inv.createdAt ? new Date(inv.createdAt.seconds * 1000).toLocaleDateString() : ''
       };
     });
@@ -203,23 +203,35 @@ export default function InvoiceManagement() {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const range = XLSX.utils.decode_range(worksheet['!ref']);
     
+    // Apply colors to each data row based on bill type
     invoicesToExport.forEach((inv, rowIdx) => {
       const excelRow = rowIdx + 1;
       const billType = inv.billType || 'none';
-      if (billType === 'debit' || billType === 'credit') {
-        const fillColor = billType === 'debit' ? 'FFCCCC' : 'CCFFCC';
-        const fontColor = billType === 'debit' ? 'CC0000' : '006600';
+      
+      if (billType === 'debit') {
+        // Debit rows - Light Red background with Dark Red text
         for (let col = range.s.c; col <= range.e.c; col++) {
           const cellAddr = XLSX.utils.encode_cell({ r: excelRow, c: col });
           if (!worksheet[cellAddr]) continue;
           worksheet[cellAddr].s = {
-            fill: { patternType: 'solid', fgColor: { rgb: fillColor } },
-            font: { color: { rgb: fontColor }, bold: false }
+            fill: { patternType: 'solid', fgColor: { rgb: 'FFCCCC' } },
+            font: { color: { rgb: 'CC0000' }, bold: true }
+          };
+        }
+      } else if (billType === 'credit') {
+        // Credit rows - Light Green background with Dark Green text
+        for (let col = range.s.c; col <= range.e.c; col++) {
+          const cellAddr = XLSX.utils.encode_cell({ r: excelRow, c: col });
+          if (!worksheet[cellAddr]) continue;
+          worksheet[cellAddr].s = {
+            fill: { patternType: 'solid', fgColor: { rgb: 'CCFFCC' } },
+            font: { color: { rgb: '006600' }, bold: true }
           };
         }
       }
     });
 
+    // Apply header styling (blue background, white text, bold)
     for (let col = range.s.c; col <= range.e.c; col++) {
       const cellAddr = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!worksheet[cellAddr]) continue;
@@ -1699,10 +1711,10 @@ export default function InvoiceManagement() {
                                   )}
                                 </div>
                               )}
-                             </td>
+                            </td>
                             <td className="px-4 py-3 text-xs sm:text-sm font-semibold text-slate-800">
                               {formatAmountWithCurrency(isEditing ? calculateTotalAmount(editForm.selectedServices) : (invoice.subtotal || invoice.amount))}
-                             </td>
+                            </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <input
@@ -1717,7 +1729,7 @@ export default function InvoiceManagement() {
                                   {isNA(invoice.taxPercentage) ? 'N/A' : (invoice.taxPercentage ? `${invoice.taxPercentage}%` : '0%')}
                                 </div>
                               )}
-                             </td>
+                            </td>
                             <td className="px-4 py-3 text-xs sm:text-sm font-bold text-blue-600">
                               {isEditing ? (
                                 <span>
@@ -1729,7 +1741,7 @@ export default function InvoiceManagement() {
                               ) : (
                                 formatAmountWithCurrency(invoice.total || invoice.amount)
                               )}
-                             </td>
+                            </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <div>
@@ -1770,7 +1782,7 @@ export default function InvoiceManagement() {
                                   )}
                                 </div>
                               )}
-                             </td>
+                            </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <select
@@ -1788,7 +1800,7 @@ export default function InvoiceManagement() {
                                   {invoice.status || 'unpaid'}
                                 </span>
                               )}
-                             </td>
+                            </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <div className="flex gap-1">
@@ -1832,8 +1844,8 @@ export default function InvoiceManagement() {
                                   </button>
                                 </div>
                               )}
-                             </td>
-                           </tr>
+                            </td>
+                          </tr>
                         );
                       })
                     )}
