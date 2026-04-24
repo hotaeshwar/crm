@@ -76,6 +76,8 @@ export default function InvoiceManagement() {
   const [loadingArchive, setLoadingArchive] = useState(false);
   const [archiveSearchTerm, setArchiveSearchTerm] = useState('');
   const [archiveStatusFilter, setArchiveStatusFilter] = useState('all');
+  // Track viewed archive months to show notification badge only for unviewed ones
+  const [viewedArchiveMonths, setViewedArchiveMonths] = useState(new Set());
 
   // Sorted clients for dropdown
   const sortedClients = useMemo(() => {
@@ -133,6 +135,11 @@ export default function InvoiceManagement() {
       setLoadingArchive(false);
     }
   };
+
+  // Calculate unviewed archive count for badge
+  const unviewedArchiveCount = useMemo(() => {
+    return archivedInvoices.filter(archive => !viewedArchiveMonths.has(archive.id)).length;
+  }, [archivedInvoices, viewedArchiveMonths]);
 
   const generateInvoiceNumber = () => {
     const now = new Date();
@@ -1108,6 +1115,8 @@ export default function InvoiceManagement() {
     setArchiveInvoices(archive.invoices || []);
     setSelectedDate(null);
     setFilteredInvoices([]);
+    // Mark this archive month as viewed
+    setViewedArchiveMonths(prev => new Set([...prev, archive.id]));
   };
 
   const hideArchiveMonth = () => {
@@ -1166,6 +1175,12 @@ export default function InvoiceManagement() {
       
       if (updatedInvoices.length === 0) {
         await deleteDoc(doc(db, 'archived_invoices', archiveId));
+        // Remove from viewed set as well
+        setViewedArchiveMonths(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(archiveId);
+          return newSet;
+        });
       } else {
         const newTotalAmount = updatedInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
         await updateDoc(doc(db, 'archived_invoices', archiveId), {
@@ -1281,16 +1296,16 @@ export default function InvoiceManagement() {
             >
               <Archive className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Archive</span>
-              {archivedInvoices.length > 0 && (
-                <span className="ml-1 px-1.5 py-0.5 bg-purple-200 text-purple-800 rounded-full text-xs">
-                  {archivedInvoices.length}
+              {unviewedArchiveCount > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 bg-purple-600 text-white rounded-full text-xs">
+                  {unviewedArchiveCount}
                 </span>
               )}
             </button>
           </div>
         </div>
 
-        {/* Invoices Tab Content */}
+        {/* Invoices Tab Content - Same as before */}
         {activeTab === 'invoices' && (
           <>
             {/* Create New Invoice Section */}
@@ -1784,7 +1799,7 @@ export default function InvoiceManagement() {
                                   )}
                                 </div>
                               )}
-                            </td>
+                            <td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <select
@@ -2128,7 +2143,7 @@ export default function InvoiceManagement() {
           </>
         )}
 
-        {/* Calendar Tab Content */}
+        {/* Calendar Tab Content - Same as before */}
         {activeTab === 'calendar' && (
           <div className="space-y-4 sm:space-y-6">
             <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-4">
@@ -2416,11 +2431,20 @@ export default function InvoiceManagement() {
               <div className="space-y-4">
                 {archivedInvoices.map((archive) => {
                   const isSelected = selectedArchiveMonth === archive.monthName && selectedArchiveYear === archive.year;
+                  const isUnviewed = !viewedArchiveMonths.has(archive.id);
+                  
                   return (
-                    <div key={archive.id} className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+                    <div key={archive.id} className={`bg-white rounded-xl shadow-lg border overflow-hidden transition-all ${isUnviewed && !isSelected ? 'border-purple-400 ring-2 ring-purple-300 ring-opacity-50' : 'border-slate-200'}`}>
                       <div className="bg-gradient-to-r from-purple-500 to-indigo-600 p-4 sm:p-5">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                          <div><h3 className="text-xl sm:text-2xl font-bold text-white mb-1">{archive.monthName} {archive.year}</h3><p className="text-purple-100 text-xs sm:text-sm">Archived: {archive.archivedDate ? new Date(archive.archivedDate.seconds * 1000).toLocaleDateString() : 'N/A'}</p></div>
+                          <div className="flex items-center gap-3">
+                            <h3 className="text-xl sm:text-2xl font-bold text-white mb-1">{archive.monthName} {archive.year}</h3>
+                            {isUnviewed && !isSelected && (
+                              <span className="bg-yellow-400 text-purple-900 text-xs px-2 py-0.5 rounded-full animate-pulse font-semibold">
+                                New
+                              </span>
+                            )}
+                          </div>
                           <div className="flex gap-2">
                             <button onClick={() => exportToExcel(archive.invoices || [], `archived_${archive.monthName}_${archive.year}`)} className="px-3 py-1.5 bg-white/20 backdrop-blur text-white rounded-lg hover:bg-white/30 transition-all flex items-center gap-1.5 text-xs sm:text-sm font-medium"><FileSpreadsheet className="w-4 h-4" />Export Excel</button>
                             <button
