@@ -82,7 +82,7 @@ export default function Ledger() {
   };
 
   const formatAmountWithCurrency = (amount) => {
-    return `₹ ${formatAmount(amount)}`;
+    return `Rs. ${formatAmount(amount)}`;
   };
 
   const getPaidForInvoice = (invoiceId) =>
@@ -149,8 +149,8 @@ export default function Ledger() {
     </span>
   );
 
-  // Export to PDF only
-  const downloadPDF = () => {
+  // ── PDF DOWNLOAD (logo + company header matching InvoiceManagement) ────────
+  const downloadPDF = async () => {
     if (!selectedClient) {
       showToast('Please select a client first', 'error');
       return;
@@ -161,7 +161,7 @@ export default function Ledger() {
       unit: 'mm',
       format: 'a4'
     });
-    
+
     const pageWidth = pdfDoc.internal.pageSize.getWidth();
     const pageHeight = pdfDoc.internal.pageSize.getHeight();
     const leftMargin = 15;
@@ -169,22 +169,83 @@ export default function Ledger() {
     const contentWidth = pageWidth - leftMargin - rightMargin;
     let yPos = 15;
 
-    // Header with gradient effect
-    pdfDoc.setFillColor(79, 70, 229);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 50, 5, 5, 'F');
-    pdfDoc.setTextColor(255, 255, 255);
-    pdfDoc.setFontSize(24);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('CLIENT LEDGER', leftMargin + contentWidth/2, yPos + 18, { align: 'center' });
-    pdfDoc.setFontSize(12);
-    pdfDoc.text(selectedClient.name, leftMargin + contentWidth/2, yPos + 33, { align: 'center' });
-    if (selectedClient.company) {
-      pdfDoc.setFontSize(10);
-      pdfDoc.text(selectedClient.company, leftMargin + contentWidth/2, yPos + 45, { align: 'center' });
-    }
-    yPos += 60;
+    // ── Logo + Company Header ───────────────────────────────────────────────
+    const logoWidth = 65;
+    const logoStartX = leftMargin;
 
-    // Client Details Section
+    try {
+      const img = new Image();
+      img.src = '/images/LOGO.png';
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+        setTimeout(reject, 500);
+      });
+      const imageAspectRatio = img.naturalHeight / img.naturalWidth;
+      const logoHeight = logoWidth * imageAspectRatio;
+      pdfDoc.addImage(img, 'PNG', logoStartX, yPos, logoWidth, logoHeight, undefined, 'FAST');
+
+      const infoStartX = logoStartX + logoWidth + 18;
+      pdfDoc.setTextColor(0, 0, 0);
+      pdfDoc.setFontSize(10);
+      pdfDoc.setFont(undefined, 'bold');
+
+      let infoY = yPos + 5;
+      pdfDoc.text('SCO 246, Devaji Plaza, VIP Road', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('Zirakpur, India', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('marketing@buildingindiadigital.com', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('For any enquiry, Call Us:', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.setFontSize(11);
+      pdfDoc.text('+919041499964', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('+919041499973', infoStartX, infoY);
+
+      yPos += Math.max(logoHeight, infoY - yPos) + 15;
+    } catch (error) {
+      const fallbackHeight = 50;
+      pdfDoc.setFillColor(255, 152, 0);
+      pdfDoc.roundedRect(logoStartX, yPos, logoWidth, fallbackHeight, 3, 3, 'F');
+      pdfDoc.setTextColor(255, 255, 255);
+      pdfDoc.setFontSize(24);
+      pdfDoc.setFont(undefined, 'bold');
+      pdfDoc.text('BID', logoStartX + logoWidth / 2, yPos + fallbackHeight / 2 + 3, { align: 'center' });
+
+      const infoStartX = logoStartX + logoWidth + 18;
+      pdfDoc.setTextColor(0, 0, 0);
+      pdfDoc.setFontSize(10);
+      pdfDoc.setFont(undefined, 'bold');
+
+      let infoY = yPos + 5;
+      pdfDoc.text('SCO 246, Devaji Plaza, VIP Road', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('Zirakpur, India', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('marketing@buildingindiadigital.com', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('For any enquiry, Call Us:', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.setFontSize(11);
+      pdfDoc.text('+919041499964', infoStartX, infoY);
+      infoY += 5;
+      pdfDoc.text('+919041499973', infoStartX, infoY);
+
+      yPos += Math.max(fallbackHeight, infoY - yPos) + 15;
+    }
+
+    // ── CLIENT LEDGER Banner ────────────────────────────────────────────────
+    pdfDoc.setFillColor(79, 70, 229);
+    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 14, 2, 2, 'F');
+    pdfDoc.setTextColor(255, 255, 255);
+    pdfDoc.setFontSize(16);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('CLIENT LEDGER', leftMargin + contentWidth / 2, yPos + 10, { align: 'center' });
+    yPos += 22;
+
+    // ── Client Details Section ──────────────────────────────────────────────
     pdfDoc.setFillColor(245, 245, 245);
     pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 38, 3, 3, 'F');
     pdfDoc.setTextColor(79, 70, 229);
@@ -194,29 +255,29 @@ export default function Ledger() {
     pdfDoc.setFontSize(10);
     pdfDoc.setFont(undefined, 'normal');
     pdfDoc.setTextColor(0, 0, 0);
-    
+
     let detailY = yPos + 18;
     pdfDoc.text(`Name: ${selectedClient.name}`, leftMargin + 5, detailY);
     if (selectedClient.company) pdfDoc.text(`Company: ${selectedClient.company}`, leftMargin + 80, detailY);
     detailY += 7;
     if (selectedClient.email) pdfDoc.text(`Email: ${selectedClient.email}`, leftMargin + 5, detailY);
     if (selectedClient.phone) pdfDoc.text(`Phone: ${selectedClient.phone}`, leftMargin + 80, detailY);
-    
+
     yPos += 48;
 
-    // Financial Summary Section
+    // ── Financial Summary Section ───────────────────────────────────────────
     pdfDoc.setFillColor(245, 245, 245);
     pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 35, 3, 3, 'F');
     pdfDoc.setTextColor(79, 70, 229);
     pdfDoc.setFontSize(12);
     pdfDoc.setFont(undefined, 'bold');
     pdfDoc.text('FINANCIAL SUMMARY', leftMargin + 5, yPos + 8);
-    
+
     pdfDoc.setFontSize(9);
     pdfDoc.setTextColor(0, 0, 0);
     const summaryX = leftMargin + 5;
     let summaryY = yPos + 18;
-    
+
     pdfDoc.text(`Total Invoiced: ${formatAmountWithCurrency(totalInvoiced)}`, summaryX, summaryY);
     pdfDoc.text(`Total Collected: ${formatAmountWithCurrency(totalCollected)}`, summaryX + 70, summaryY);
     pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, summaryX + 140, summaryY);
@@ -224,29 +285,29 @@ export default function Ledger() {
     pdfDoc.text(`Collection Rate: ${collectionRate}%`, summaryX, summaryY);
     pdfDoc.text(`Debit Total: ${formatAmountWithCurrency(debitTotal)}`, summaryX + 70, summaryY);
     pdfDoc.text(`Credit Total: ${formatAmountWithCurrency(creditTotal)}`, summaryX + 140, summaryY);
-    
+
     yPos += 45;
 
-    // Invoice Summary Stats
+    // ── Invoice Summary Stats ───────────────────────────────────────────────
     pdfDoc.setFillColor(79, 70, 229);
     pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 14, 2, 2, 'F');
     pdfDoc.setTextColor(255, 255, 255);
     pdfDoc.setFontSize(13);
     pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth/2, yPos + 10, { align: 'center' });
+    pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth / 2, yPos + 10, { align: 'center' });
     yPos += 20;
 
     pdfDoc.setTextColor(0, 0, 0);
     pdfDoc.setFontSize(9);
     pdfDoc.setFont(undefined, 'normal');
-    
+
     const stats = [
       { label: 'Paid', value: paidCount, color: [76, 175, 80] },
       { label: 'Partial', value: partialCount, color: [255, 152, 0] },
       { label: 'Unpaid', value: unpaidCount, color: [244, 67, 54] },
       { label: 'Total', value: clientInvoices.length, color: [79, 70, 229] }
     ];
-    
+
     const statWidth = contentWidth / stats.length;
     stats.forEach((stat, idx) => {
       const statX = leftMargin + (idx * statWidth);
@@ -255,26 +316,26 @@ export default function Ledger() {
       pdfDoc.setTextColor(255, 255, 255);
       pdfDoc.setFontSize(18);
       pdfDoc.setFont(undefined, 'bold');
-      pdfDoc.text(stat.value.toString(), statX + statWidth/2, yPos + 14, { align: 'center' });
+      pdfDoc.text(stat.value.toString(), statX + statWidth / 2, yPos + 14, { align: 'center' });
       pdfDoc.setFontSize(9);
-      pdfDoc.text(stat.label, statX + statWidth/2, yPos + 22, { align: 'center' });
+      pdfDoc.text(stat.label, statX + statWidth / 2, yPos + 22, { align: 'center' });
     });
-    
+
     yPos += 32;
 
-    // Invoices Table
+    // ── Invoices Table ──────────────────────────────────────────────────────
     if (filteredInvoices.length > 0) {
       if (yPos > pageHeight - 50) {
         pdfDoc.addPage();
         yPos = 20;
       }
-      
+
       pdfDoc.setFillColor(79, 70, 229);
       pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 12, 2, 2, 'F');
       pdfDoc.setTextColor(255, 255, 255);
       pdfDoc.setFontSize(12);
       pdfDoc.setFont(undefined, 'bold');
-      pdfDoc.text('INVOICE DETAILS', leftMargin + contentWidth/2, yPos + 8, { align: 'center' });
+      pdfDoc.text('INVOICE DETAILS', leftMargin + contentWidth / 2, yPos + 8, { align: 'center' });
       yPos += 18;
 
       const tableData = filteredInvoices.map(inv => {
@@ -283,10 +344,8 @@ export default function Ledger() {
         const paid = fromPmts > 0 ? Math.min(fromPmts, invoiceTotal) : inv.status === 'paid' ? invoiceTotal : (inv.amountReceived || 0);
         const remaining = Math.max(0, invoiceTotal - paid);
         const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
-        
-        // Get bill type for styling
         const billTypeLabel = (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1);
-        
+
         return [
           inv.invoiceNumber || 'N/A',
           inv.date || 'N/A',
@@ -297,16 +356,6 @@ export default function Ledger() {
           formatAmountWithCurrency(remaining),
           inv.status || 'unpaid'
         ];
-      });
-
-      // Apply colors based on bill type
-      const bodyStyles = filteredInvoices.map(inv => {
-        if (inv.billType === 'debit') {
-          return { textColor: [200, 0, 0], fillColor: [255, 240, 240] };
-        } else if (inv.billType === 'credit') {
-          return { textColor: [0, 100, 0], fillColor: [240, 255, 240] };
-        }
-        return {};
       });
 
       pdfDoc.autoTable({
@@ -342,7 +391,6 @@ export default function Ledger() {
         },
         margin: { left: leftMargin, right: rightMargin },
         didParseCell: (data) => {
-          // Color coding for bill type column
           if (data.column.index === 3 && data.row.index > 0) {
             const invoice = filteredInvoices[data.row.index - 1];
             if (invoice?.billType === 'debit') {
@@ -353,7 +401,6 @@ export default function Ledger() {
               data.cell.styles.fontStyle = 'bold';
             }
           }
-          // Color coding for status column
           if (data.column.index === 7 && data.row.index > 0) {
             const invoice = filteredInvoices[data.row.index - 1];
             if (invoice?.status === 'paid') {
@@ -376,20 +423,20 @@ export default function Ledger() {
           pdfDoc.text(`Page ${pdfDoc.internal.getNumberOfPages()}`, pageWidth - rightMargin, footerY, { align: 'right' });
         }
       });
-      
+
       yPos = pdfDoc.lastAutoTable.finalY + 10;
     }
 
-    // Footer
+    // ── Footer ──────────────────────────────────────────────────────────────
     const finalY = Math.min(yPos + 10, pageHeight - 25);
     pdfDoc.setDrawColor(79, 70, 229);
     pdfDoc.setLineWidth(0.5);
     pdfDoc.line(leftMargin, finalY, leftMargin + contentWidth, finalY);
     pdfDoc.setFontSize(8);
     pdfDoc.setTextColor(100, 100, 100);
-    pdfDoc.text('Building India Digital - Client Ledger Statement', leftMargin + contentWidth/2, finalY + 5, { align: 'center' });
+    pdfDoc.text('Building India Digital - Client Ledger Statement', leftMargin + contentWidth / 2, finalY + 5, { align: 'center' });
     pdfDoc.setFontSize(7);
-    pdfDoc.text('This is a computer generated statement and does not require a signature.', leftMargin + contentWidth/2, finalY + 10, { align: 'center' });
+    pdfDoc.text('This is a computer generated statement and does not require a signature.', leftMargin + contentWidth / 2, finalY + 10, { align: 'center' });
 
     pdfDoc.save(`Ledger_${selectedClient.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
     showToast(`Ledger PDF downloaded for ${selectedClient.name}`, 'success');
