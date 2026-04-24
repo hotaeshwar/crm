@@ -156,7 +156,6 @@ export default function Ledger() {
     const leftMargin = 15;
     const rightMargin = 15;
     const contentWidth = pageWidth - leftMargin - rightMargin;
-    // col3X: start x for 3rd column in 3-column rows (evenly split)
     const col1X = leftMargin + 5;
     const col2X = leftMargin + (contentWidth / 3);
     const col3X = leftMargin + (contentWidth / 3) * 2;
@@ -225,7 +224,6 @@ export default function Ledger() {
     yPos += 18;
 
     // ── Client Details ──────────────────────────────────────────────────────
-    // height: title(8) + row1(7) + row2(7) + padding(10) = 32
     const clientBoxH = 36;
     pdfDoc.setFillColor(245, 245, 245);
     pdfDoc.roundedRect(leftMargin, yPos, contentWidth, clientBoxH, 3, 3, 'F');
@@ -244,63 +242,8 @@ export default function Ledger() {
     if (selectedClient.phone) pdfDoc.text(`Phone: ${selectedClient.phone}`, col2X, detailY);
     yPos += clientBoxH + 8;
 
-    // ── Financial Summary ───────────────────────────────────────────────────
-    // 2 rows of data → height: title(8) + row1(7) + row2(7) + padding(12) = 34
-    const summaryBoxH = 38;
-    pdfDoc.setFillColor(245, 245, 245);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, summaryBoxH, 3, 3, 'F');
-    pdfDoc.setTextColor(79, 70, 229);
-    pdfDoc.setFontSize(11);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('FINANCIAL SUMMARY', col1X, yPos + 8);
-    pdfDoc.setFontSize(9);
-    pdfDoc.setFont(undefined, 'normal');
-    pdfDoc.setTextColor(0, 0, 0);
-    let summaryY = yPos + 18;
-    // Row 1 — evenly split into 3 columns
-    pdfDoc.text(`Total Invoiced: ${formatAmountWithCurrency(totalInvoiced)}`, col1X, summaryY);
-    pdfDoc.text(`Total Collected: ${formatAmountWithCurrency(totalCollected)}`, col2X, summaryY);
-    pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, col3X, summaryY);
-    summaryY += 8;
-    // Row 2
-    pdfDoc.text(`Collection Rate: ${collectionRate}%`, col1X, summaryY);
-    pdfDoc.text(`Debit Total: ${formatAmountWithCurrency(debitTotal)}`, col2X, summaryY);
-    pdfDoc.text(`Credit Total: ${formatAmountWithCurrency(creditTotal)}`, col3X, summaryY);
-    yPos += summaryBoxH + 8;
-
-    // ── Invoice Summary Stats ───────────────────────────────────────────────
-    pdfDoc.setFillColor(79, 70, 229);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 12, 2, 2, 'F');
-    pdfDoc.setTextColor(255, 255, 255);
-    pdfDoc.setFontSize(12);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth / 2, yPos + 8.5, { align: 'center' });
-    yPos += 18;
-
-    const stats = [
-      { label: 'Paid', value: paidCount, color: [76, 175, 80] },
-      { label: 'Partial', value: partialCount, color: [255, 152, 0] },
-      { label: 'Unpaid', value: unpaidCount, color: [244, 67, 54] },
-      { label: 'Total', value: clientInvoices.length, color: [79, 70, 229] }
-    ];
-    const statCardW = (contentWidth - 6) / stats.length; // 3px gap between each
-    const statCardH = 22;
-    stats.forEach((stat, idx) => {
-      const statX = leftMargin + idx * (statCardW + 2);
-      pdfDoc.setFillColor(...stat.color);
-      pdfDoc.roundedRect(statX, yPos, statCardW, statCardH, 3, 3, 'F');
-      pdfDoc.setTextColor(255, 255, 255);
-      pdfDoc.setFontSize(16);
-      pdfDoc.setFont(undefined, 'bold');
-      pdfDoc.text(stat.value.toString(), statX + statCardW / 2, yPos + 13, { align: 'center' });
-      pdfDoc.setFontSize(8);
-      pdfDoc.setFont(undefined, 'normal');
-      pdfDoc.text(stat.label, statX + statCardW / 2, yPos + 20, { align: 'center' });
-    });
-    yPos += statCardH + 10;
-
-    // ── Invoices Table ──────────────────────────────────────────────────────
-    if (filteredInvoices.length > 0) {
+    // ── GENERAL LEDGER TABLE (Simple Entries) ───────────────────────────────
+    if (clientInvoices.length > 0) {
       if (yPos > pageHeight - 50) { pdfDoc.addPage(); yPos = 20; }
 
       pdfDoc.setFillColor(79, 70, 229);
@@ -308,83 +251,176 @@ export default function Ledger() {
       pdfDoc.setTextColor(255, 255, 255);
       pdfDoc.setFontSize(12);
       pdfDoc.setFont(undefined, 'bold');
-      pdfDoc.text('INVOICE DETAILS', leftMargin + contentWidth / 2, yPos + 8.5, { align: 'center' });
-      yPos += 16;
+      pdfDoc.text('LEDGER ENTRIES', leftMargin + contentWidth / 2, yPos + 8.5, { align: 'center' });
+      yPos += 18;
 
-      const tableData = filteredInvoices.map(inv => {
-        const invoiceTotal = inv.total || inv.amount || 0;
-        const fromPmts = getPaidForInvoice(inv.id);
-        const paid = fromPmts > 0 ? Math.min(fromPmts, invoiceTotal) : inv.status === 'paid' ? invoiceTotal : (inv.amountReceived || 0);
-        const remaining = Math.max(0, invoiceTotal - paid);
-        const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
-        const billTypeLabel = (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1);
-        return [
-          inv.invoiceNumber || 'N/A',
-          inv.date || 'N/A',
-          services.length > 30 ? services.substring(0, 27) + '...' : services,
-          billTypeLabel,
-          formatAmountWithCurrency(invoiceTotal),
-          formatAmountWithCurrency(paid),
-          formatAmountWithCurrency(remaining),
-          (inv.status || 'unpaid').charAt(0).toUpperCase() + (inv.status || 'unpaid').slice(1)
-        ];
+      // Sort invoices chronologically (oldest first)
+      const sortedInvoices = [...clientInvoices].sort((a, b) => {
+        const dateA = a.date ? new Date(a.date) : new Date(0);
+        const dateB = b.date ? new Date(b.date) : new Date(0);
+        return dateA - dateB;
       });
 
-      // Total table width = contentWidth = 180mm
-      // Cols: #(28) Date(18) Services(44) Type(14) Total(22) Paid(20) Due(20) Status(14) = 180
+      let runningBalance = 0;
+      const glRows = [];
+
+      sortedInvoices.forEach((inv) => {
+        const invoiceTotal = inv.total || inv.amount || 0;
+        const fromPmts = getPaidForInvoice(inv.id);
+        const paidAmt = fromPmts > 0
+          ? Math.min(fromPmts, invoiceTotal)
+          : inv.status === 'paid' ? invoiceTotal : (inv.amountReceived || 0);
+
+        const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'Service';
+        const shortDesc = services.length > 40 ? services.substring(0, 37) + '...' : services;
+        const billType = (inv.billType || '').toLowerCase();
+
+        // Invoice row (Debit = amount owed by client)
+        let debitAmt = 0;
+        let creditAmt = 0;
+        if (billType === 'debit') {
+          debitAmt = invoiceTotal;
+        } else if (billType === 'credit') {
+          creditAmt = invoiceTotal;
+        } else {
+          debitAmt = invoiceTotal;
+        }
+        runningBalance += debitAmt - creditAmt;
+
+        const billLabel = billType === 'debit' ? 'Invoice' : billType === 'credit' ? 'Credit Note' : 'Invoice';
+        glRows.push({
+          date: inv.date || '—',
+          description: `${billLabel} #${inv.invoiceNumber || 'N/A'} - ${shortDesc}`,
+          debit: debitAmt > 0 ? formatAmountWithCurrency(debitAmt) : '—',
+          credit: creditAmt > 0 ? formatAmountWithCurrency(creditAmt) : '—',
+          balance: formatAmountWithCurrency(Math.abs(runningBalance)) + (runningBalance < 0 ? ' Cr' : ' Dr'),
+          isPayment: false,
+          rawBalance: runningBalance,
+        });
+
+        // Payment row (reduces balance)
+        if (paidAmt > 0) {
+          runningBalance -= paidAmt;
+          glRows.push({
+            date: inv.date || '—',
+            description: `Payment Received - ${shortDesc}`,
+            debit: '—',
+            credit: formatAmountWithCurrency(paidAmt),
+            balance: formatAmountWithCurrency(Math.abs(runningBalance)) + (runningBalance < 0 ? ' Cr' : ' Dr'),
+            isPayment: true,
+            rawBalance: runningBalance,
+          });
+        }
+      });
+
+      // Calculate totals
+      const totalDebitGL = clientInvoices.reduce((s, inv) => s + ((inv.billType !== 'credit') ? (inv.total || inv.amount || 0) : 0), 0);
+      const totalCreditGL = clientInvoices.reduce((s, inv) => {
+        const inv_total = inv.total || inv.amount || 0;
+        const from_pmts = getPaidForInvoice(inv.id);
+        const paid_amt = from_pmts > 0 ? Math.min(from_pmts, inv_total) : inv.status === 'paid' ? inv_total : (inv.amountReceived || 0);
+        return s + ((inv.billType === 'credit') ? inv_total : 0) + paid_amt;
+      }, 0);
+      const closingBalance = totalDebitGL - totalCreditGL;
+
+      // Render autoTable
+      const glTableData = glRows.map(row => [
+        row.date,
+        row.description,
+        row.debit,
+        row.credit,
+        row.balance,
+      ]);
+
       autoTable(pdfDoc, {
         startY: yPos,
-        head: [['Invoice #', 'Date', 'Services', 'Type', 'Total', 'Paid', 'Due', 'Status']],
-        body: tableData,
+        head: [['Date', 'Particulars', 'Debit (Dr)', 'Credit (Cr)', 'Balance']],
+        body: glTableData,
         theme: 'striped',
         headStyles: {
           fillColor: [79, 70, 229],
           textColor: [255, 255, 255],
-          fontSize: 7.5,
+          fontSize: 8,
           fontStyle: 'bold',
           halign: 'center',
-          cellPadding: 3
+          cellPadding: 3,
         },
-        bodyStyles: { fontSize: 7, cellPadding: 2.5, valign: 'middle' },
-        alternateRowStyles: { fillColor: [248, 248, 250] },
+        bodyStyles: { fontSize: 7.5, cellPadding: 2.5, valign: 'middle' },
+        alternateRowStyles: { fillColor: [248, 248, 252] },
         tableWidth: contentWidth,
         columnStyles: {
-          0: { cellWidth: 28, halign: 'left' },
-          1: { cellWidth: 18, halign: 'center' },
-          2: { cellWidth: 44, halign: 'left' },
-          3: { cellWidth: 14, halign: 'center' },
-          4: { cellWidth: 22, halign: 'right' },
-          5: { cellWidth: 20, halign: 'right' },
-          6: { cellWidth: 20, halign: 'right' },
-          7: { cellWidth: 14, halign: 'center' }
+          0: { cellWidth: 22, halign: 'center' },
+          1: { cellWidth: 74, halign: 'left' },
+          2: { cellWidth: 28, halign: 'right' },
+          3: { cellWidth: 28, halign: 'right' },
+          4: { cellWidth: 28, halign: 'right' },
         },
         margin: { left: leftMargin, right: rightMargin },
         didParseCell: (data) => {
           if (data.section === 'body') {
-            if (data.column.index === 3) {
-              const invoice = filteredInvoices[data.row.index];
-              if (invoice?.billType === 'debit') { data.cell.styles.textColor = [200, 0, 0]; data.cell.styles.fontStyle = 'bold'; }
-              else if (invoice?.billType === 'credit') { data.cell.styles.textColor = [0, 120, 0]; data.cell.styles.fontStyle = 'bold'; }
+            const row = glRows[data.row.index];
+            if (!row) return;
+
+            // Debit column — red tint
+            if (data.column.index === 2 && data.cell.text[0] !== '—') {
+              data.cell.styles.textColor = [180, 0, 0];
+              data.cell.styles.fontStyle = 'bold';
             }
-            if (data.column.index === 7) {
-              const invoice = filteredInvoices[data.row.index];
-              const status = (invoice?.status || '').toLowerCase();
-              if (status === 'paid') { data.cell.styles.textColor = [76, 175, 80]; data.cell.styles.fontStyle = 'bold'; }
-              else if (status === 'partial') { data.cell.styles.textColor = [255, 152, 0]; data.cell.styles.fontStyle = 'bold'; }
-              else if (status === 'unpaid') { data.cell.styles.textColor = [244, 67, 54]; data.cell.styles.fontStyle = 'bold'; }
+
+            // Credit column — green tint
+            if (data.column.index === 3 && data.cell.text[0] !== '—') {
+              data.cell.styles.textColor = [0, 130, 0];
+              data.cell.styles.fontStyle = 'bold';
+            }
+
+            // Balance column — colour by Dr/Cr
+            if (data.column.index === 4) {
+              const isCredit = row.rawBalance < 0;
+              data.cell.styles.textColor = isCredit ? [0, 130, 0] : [79, 70, 229];
+              data.cell.styles.fontStyle = 'bold';
+            }
+
+            // Payment rows — light green background
+            if (row.isPayment) {
+              data.cell.styles.fillColor = [240, 255, 240];
             }
           }
         },
-        didDrawPage: () => {
+        didDrawPage: (hookData) => {
           const footerY = pdfDoc.internal.pageSize.getHeight() - 10;
           pdfDoc.setFontSize(7.5);
           pdfDoc.setTextColor(150, 150, 150);
           pdfDoc.text(`Generated on ${new Date().toLocaleString()}`, leftMargin, footerY);
           pdfDoc.text(`Page ${pdfDoc.internal.getNumberOfPages()}`, pageWidth - rightMargin, footerY, { align: 'right' });
-        }
+        },
       });
 
-      yPos = pdfDoc.lastAutoTable.finalY + 10;
+      yPos = pdfDoc.lastAutoTable.finalY + 8;
+
+      // Closing Balance Summary
+      const closingBoxH = 16;
+      if (yPos + closingBoxH > pageHeight - 25) { pdfDoc.addPage(); yPos = 20; }
+
+      pdfDoc.setFillColor(79, 70, 229);
+      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, closingBoxH, 2, 2, 'F');
+      pdfDoc.setTextColor(255, 255, 255);
+      pdfDoc.setFontSize(8.5);
+      pdfDoc.setFont(undefined, 'bold');
+
+      pdfDoc.text(`Total Debit: ${formatAmountWithCurrency(totalDebitGL)}`, col1X, yPos + 7);
+      pdfDoc.text(`Total Credit: ${formatAmountWithCurrency(totalCreditGL)}`, col2X, yPos + 7);
+
+      const closingLabel = closingBalance >= 0
+        ? `Closing Balance: ${formatAmountWithCurrency(closingBalance)} Dr`
+        : `Closing Balance: ${formatAmountWithCurrency(Math.abs(closingBalance))} Cr`;
+      pdfDoc.text(closingLabel, leftMargin + contentWidth - 5, yPos + 7, { align: 'right' });
+
+      yPos += closingBoxH + 8;
+    } else {
+      pdfDoc.setFontSize(10);
+      pdfDoc.setTextColor(100, 100, 100);
+      pdfDoc.text('No invoices found for this client.', leftMargin, yPos + 20);
+      yPos += 30;
     }
 
     // ── Footer ──────────────────────────────────────────────────────────────
@@ -666,7 +702,6 @@ export default function Ledger() {
                     <h3 className="text-base font-bold text-slate-800">Invoice History</h3>
                     <span className="text-xs text-slate-400 font-normal">({filteredInvoices.length} shown)</span>
                   </div>
-                  {/* ── PDF Download button lives here in the table header ── */}
                   <button
                     onClick={downloadPDF}
                     className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center gap-2 text-sm font-semibold shadow-md hover:shadow-lg"
