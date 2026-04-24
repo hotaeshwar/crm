@@ -1,6 +1,10 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
+import jsPDF from 'jspdf';
+import 'jspdf-autotable';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 import {
   BookOpen,
   User,
@@ -23,8 +27,29 @@ import {
   X,
   SlidersHorizontal,
   Mail,
-  Phone
+  Phone,
+  Download,
+  FileSpreadsheet,
+  Eye
 } from 'lucide-react';
+
+// Toast notification component
+const Toast = ({ message, type, onClose }) => {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  const bgColor = type === 'success' ? 'bg-emerald-600' : type === 'error' ? 'bg-rose-600' : 'bg-blue-600';
+  return (
+    <div className={`fixed bottom-4 right-4 z-50 ${bgColor} text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-in slide-in-from-right-5`}>
+      {type === 'success' && <CheckCircle className="w-5 h-5" />}
+      {type === 'error' && <AlertCircle className="w-5 h-5" />}
+      {type === 'info' && <AlertCircle className="w-5 h-5" />}
+      <span className="text-sm font-medium">{message}</span>
+    </div>
+  );
+};
 
 export default function Ledger() {
   const [clients, setClients] = useState([]);
@@ -34,6 +59,13 @@ export default function Ledger() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
+  
+  // Toast state
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+  };
 
   useEffect(() => {
     const unsubClients = onSnapshot(collection(db, 'clients'), s =>
@@ -51,6 +83,10 @@ export default function Ledger() {
   const formatAmount = (amount) => {
     const num = parseFloat(amount) || 0;
     return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
+  };
+
+  const formatAmountWithCurrency = (amount) => {
+    return `₹ ${formatAmount(amount)}`;
   };
 
   const getPaidForInvoice = (invoiceId) =>
@@ -117,6 +153,263 @@ export default function Ledger() {
     </span>
   );
 
+  // Export to Excel
+  const exportToExcel = () => {
+    if (!selectedClient) {
+      showToast('Please select a client first', 'error');
+      return;
+    }
+
+    const data = filteredInvoices.map(inv => {
+      const invoiceTotal = inv.total || inv.amount || 0;
+      const fromPmts = getPaidForInvoice(inv.id);
+      const paid = fromPmts > 0 ? Math.min(fromPmts, invoiceTotal) : inv.status === 'paid' ? invoiceTotal : (inv.amountReceived || 0);
+      const remaining = Math.max(0, invoiceTotal - paid);
+      const services = inv.selectedServices?.map(s => `${s.name} (₹${formatAmount(s.amount || 0)})`).join(', ') || inv.service || 'N/A';
+
+      return {
+        'Invoice #': inv.invoiceNumber,
+        'Date': inv.date,
+        'Services': services,
+        'Bill Type': (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1),
+        'Total (₹)': invoiceTotal,
+        'Paid (₹)': paid,
+        'Remaining (₹)': remaining,
+        'Status': inv.status || 'unpaid',
+        'Payment Days': inv.paymentDays || 30,
+      };
+    });
+
+    const summaryData = [
+      { Metric: 'Client Name', Value: selectedClient.name },
+      { Metric: 'Client Company', Value: selectedClient.company || 'N/A' },
+      { Metric: 'Client Email', Value: selectedClient.email || 'N/A' },
+      { Metric: 'Client Phone', Value: selectedClient.phone || 'N/A' },
+      { Metric: '', Value: '' },
+      { Metric: 'Total Invoiced (₹)', Value: formatAmount(totalInvoiced) },
+      { Metric: 'Total Collected (₹)', Value: formatAmount(totalCollected) },
+      { Metric: 'Total Outstanding (₹)', Value: formatAmount(totalOutstanding) },
+      { Metric: 'Collection Rate (%)', Value: collectionRate },
+      { Metric: '', Value: '' },
+      { Metric: 'Debit Total (₹)', Value: formatAmount(debitTotal) },
+      { Metric: 'Credit Total (₹)', Value: formatAmount(creditTotal) },
+      { Metric: '', Value: '' },
+      { Metric: 'Paid Invoices', Value: paidCount },
+      { Metric: 'Partial Invoices', Value: partialCount },
+      { Metric: 'Unpaid Invoices', Value: unpaidCount },
+      { Metric: 'Total Invoices', Value: clientInvoices.length },
+    ];
+
+    const summaryWorksheet = XLSX.utils.json_to_sheet(summaryData);
+    const invoiceWorksheet = XLSX.utils.json_to_sheet(data);
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, summaryWorksheet, 'Summary');
+    XLSX.utils.book_append_sheet(workbook, invoiceWorksheet, 'Invoices');
+    
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    saveAs(blob, `Ledger_${selectedClient.name}_${new Date().toISOString().split('T')[0]}.xlsx`);
+    showToast('Ledger exported successfully!', 'success');
+  };
+
+  // Export to PDF
+  const downloadPDF = () => {
+    if (!selectedClient) {
+      showToast('Please select a client first', 'error');
+      return;
+    }
+
+    const pdfDoc = new jsPDF({
+      orientation: 'portrait',
+      unit: 'mm',
+      format: 'a4'
+    });
+    
+    const pageWidth = pdfDoc.internal.pageSize.getWidth();
+    const pageHeight = pdfDoc.internal.pageSize.getHeight();
+    const leftMargin = 15;
+    const rightMargin = 15;
+    const contentWidth = pageWidth - leftMargin - rightMargin;
+    let yPos = 15;
+
+    // Header
+    pdfDoc.setFillColor(79, 70, 229);
+    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 45, 5, 5, 'F');
+    pdfDoc.setTextColor(255, 255, 255);
+    pdfDoc.setFontSize(22);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('CLIENT LEDGER', leftMargin + contentWidth/2, yPos + 15, { align: 'center' });
+    pdfDoc.setFontSize(11);
+    pdfDoc.text(selectedClient.name, leftMargin + contentWidth/2, yPos + 28, { align: 'center' });
+    if (selectedClient.company) {
+      pdfDoc.setFontSize(10);
+      pdfDoc.text(selectedClient.company, leftMargin + contentWidth/2, yPos + 38, { align: 'center' });
+    }
+    yPos += 55;
+
+    // Client Details Section
+    pdfDoc.setFillColor(245, 245, 245);
+    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 35, 3, 3, 'F');
+    pdfDoc.setTextColor(0, 0, 0);
+    pdfDoc.setFontSize(11);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('CLIENT DETAILS', leftMargin + 5, yPos + 7);
+    pdfDoc.setFontSize(9);
+    pdfDoc.setFont(undefined, 'normal');
+    
+    let detailY = yPos + 15;
+    pdfDoc.text(`Name: ${selectedClient.name}`, leftMargin + 5, detailY);
+    if (selectedClient.company) pdfDoc.text(`Company: ${selectedClient.company}`, leftMargin + 80, detailY);
+    detailY += 6;
+    if (selectedClient.email) pdfDoc.text(`Email: ${selectedClient.email}`, leftMargin + 5, detailY);
+    if (selectedClient.phone) pdfDoc.text(`Phone: ${selectedClient.phone}`, leftMargin + 80, detailY);
+    
+    yPos += 45;
+
+    // Financial Summary Section
+    pdfDoc.setFillColor(245, 245, 245);
+    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 30, 3, 3, 'F');
+    pdfDoc.setFontSize(11);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('FINANCIAL SUMMARY', leftMargin + 5, yPos + 7);
+    
+    pdfDoc.setFontSize(9);
+    const summaryX = leftMargin + 5;
+    let summaryY = yPos + 15;
+    
+    pdfDoc.text(`Total Invoiced: ${formatAmountWithCurrency(totalInvoiced)}`, summaryX, summaryY);
+    pdfDoc.text(`Total Collected: ${formatAmountWithCurrency(totalCollected)}`, summaryX + 70, summaryY);
+    pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, summaryX + 140, summaryY);
+    summaryY += 6;
+    pdfDoc.text(`Collection Rate: ${collectionRate}%`, summaryX, summaryY);
+    pdfDoc.text(`Debit Total: ${formatAmountWithCurrency(debitTotal)}`, summaryX + 70, summaryY);
+    pdfDoc.text(`Credit Total: ${formatAmountWithCurrency(creditTotal)}`, summaryX + 140, summaryY);
+    
+    yPos += 40;
+
+    // Invoice Summary Stats
+    pdfDoc.setFillColor(79, 70, 229);
+    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 12, 2, 2, 'F');
+    pdfDoc.setTextColor(255, 255, 255);
+    pdfDoc.setFontSize(12);
+    pdfDoc.setFont(undefined, 'bold');
+    pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth/2, yPos + 8, { align: 'center' });
+    yPos += 18;
+
+    pdfDoc.setTextColor(0, 0, 0);
+    pdfDoc.setFontSize(9);
+    pdfDoc.setFont(undefined, 'normal');
+    
+    const stats = [
+      { label: 'Paid', value: paidCount, color: [76, 175, 80] },
+      { label: 'Partial', value: partialCount, color: [255, 152, 0] },
+      { label: 'Unpaid', value: unpaidCount, color: [244, 67, 54] },
+      { label: 'Total', value: clientInvoices.length, color: [79, 70, 229] }
+    ];
+    
+    const statWidth = contentWidth / stats.length;
+    stats.forEach((stat, idx) => {
+      const statX = leftMargin + (idx * statWidth);
+      pdfDoc.setFillColor(...stat.color);
+      pdfDoc.roundedRect(statX + 2, yPos, statWidth - 4, 22, 3, 3, 'F');
+      pdfDoc.setTextColor(255, 255, 255);
+      pdfDoc.setFontSize(16);
+      pdfDoc.setFont(undefined, 'bold');
+      pdfDoc.text(stat.value.toString(), statX + statWidth/2, yPos + 12, { align: 'center' });
+      pdfDoc.setFontSize(8);
+      pdfDoc.text(stat.label, statX + statWidth/2, yPos + 20, { align: 'center' });
+    });
+    
+    yPos += 30;
+
+    // Invoices Table
+    if (filteredInvoices.length > 0) {
+      if (yPos > pageHeight - 50) {
+        pdfDoc.addPage();
+        yPos = 20;
+      }
+      
+      pdfDoc.setFillColor(79, 70, 229);
+      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 10, 2, 2, 'F');
+      pdfDoc.setTextColor(255, 255, 255);
+      pdfDoc.setFontSize(11);
+      pdfDoc.setFont(undefined, 'bold');
+      pdfDoc.text('INVOICE DETAILS', leftMargin + contentWidth/2, yPos + 7, { align: 'center' });
+      yPos += 15;
+
+      const tableData = filteredInvoices.map(inv => {
+        const invoiceTotal = inv.total || inv.amount || 0;
+        const fromPmts = getPaidForInvoice(inv.id);
+        const paid = fromPmts > 0 ? Math.min(fromPmts, invoiceTotal) : inv.status === 'paid' ? invoiceTotal : (inv.amountReceived || 0);
+        const remaining = Math.max(0, invoiceTotal - paid);
+        const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
+        
+        return [
+          inv.invoiceNumber || 'N/A',
+          inv.date || 'N/A',
+          services.length > 30 ? services.substring(0, 27) + '...' : services,
+          (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1),
+          formatAmountWithCurrency(invoiceTotal),
+          formatAmountWithCurrency(paid),
+          formatAmountWithCurrency(remaining),
+          inv.status || 'unpaid'
+        ];
+      });
+
+      pdfDoc.autoTable({
+        startY: yPos,
+        head: [['Invoice #', 'Date', 'Services', 'Type', 'Total', 'Paid', 'Due', 'Status']],
+        body: tableData,
+        theme: 'striped',
+        headStyles: {
+          fillColor: [79, 70, 229],
+          textColor: [255, 255, 255],
+          fontSize: 8,
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        bodyStyles: {
+          fontSize: 7,
+          cellPadding: 2,
+          valign: 'middle'
+        },
+        columnStyles: {
+          0: { cellWidth: 35 },
+          1: { cellWidth: 20 },
+          2: { cellWidth: 50 },
+          3: { cellWidth: 18 },
+          4: { cellWidth: 22, halign: 'right' },
+          5: { cellWidth: 22, halign: 'right' },
+          6: { cellWidth: 22, halign: 'right' },
+          7: { cellWidth: 20, halign: 'center' }
+        },
+        margin: { left: leftMargin, right: rightMargin },
+        didDrawPage: (data) => {
+          const footerY = pdfDoc.internal.pageSize.getHeight() - 10;
+          pdfDoc.setFontSize(8);
+          pdfDoc.setTextColor(150, 150, 150);
+          pdfDoc.text(`Generated on ${new Date().toLocaleString()}`, leftMargin, footerY);
+          pdfDoc.text(`Page ${pdfDoc.internal.getNumberOfPages()}`, pageWidth - rightMargin, footerY, { align: 'right' });
+        }
+      });
+      
+      yPos = pdfDoc.lastAutoTable.finalY + 10;
+    }
+
+    // Footer
+    const finalY = Math.min(yPos + 10, pageHeight - 30);
+    pdfDoc.setDrawColor(79, 70, 229);
+    pdfDoc.setLineWidth(0.3);
+    pdfDoc.line(leftMargin, finalY, leftMargin + contentWidth, finalY);
+    pdfDoc.setFontSize(8);
+    pdfDoc.setTextColor(100, 100, 100);
+    pdfDoc.text('Building India Digital - Client Ledger Statement', leftMargin + contentWidth/2, finalY + 5, { align: 'center' });
+
+    pdfDoc.save(`Ledger_${selectedClient.name}_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast(`Ledger PDF downloaded for ${selectedClient.name}`, 'success');
+  };
+
   const filterButtons = [
     { key: 'all', label: 'All', count: clientInvoices.length },
     { key: 'debit', label: 'Debit', count: clientInvoices.filter(i => i.billType === 'debit').length },
@@ -129,19 +422,46 @@ export default function Ledger() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
       <div className="px-3 py-4 sm:px-5 sm:py-6 md:px-8 md:py-8 max-w-[1400px] mx-auto space-y-4 sm:space-y-5">
+        
+        {/* Toast */}
+        {toast && (
+          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
+        )}
 
-        {/* ── Page Header ── */}
-        <div className="flex items-center gap-4">
-          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg flex-shrink-0">
-            <BookOpen className="w-6 h-6 text-white" />
+        {/* Page Header */}
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg flex-shrink-0">
+              <BookOpen className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Client Ledger</h1>
+              <p className="text-sm text-slate-500 mt-0.5">Complete financial summary per client</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Client Ledger</h1>
-            <p className="text-sm text-slate-500 mt-0.5">Complete financial summary per client</p>
-          </div>
+          
+          {/* Download Buttons - Only show when client is selected */}
+          {selectedClient && (
+            <div className="flex gap-2">
+              <button
+                onClick={exportToExcel}
+                className="px-3 sm:px-4 py-2 bg-gradient-to-r from-emerald-600 to-green-600 text-white rounded-xl hover:from-emerald-700 hover:to-green-700 transition-all flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-md"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                <span className="hidden sm:inline">Excel</span>
+              </button>
+              <button
+                onClick={downloadPDF}
+                className="px-3 sm:px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl hover:from-red-700 hover:to-rose-700 transition-all flex items-center gap-2 text-xs sm:text-sm font-semibold shadow-md"
+              >
+                <Download className="w-4 h-4" />
+                <span className="hidden sm:inline">PDF</span>
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* ── Client Selector ── */}
+        {/* Client Selector */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Select Client</p>
           <div className="relative">
@@ -224,7 +544,7 @@ export default function Ledger() {
           </div>
         </div>
 
-        {/* ── Empty State ── */}
+        {/* Empty State */}
         {!selectedClientId && (
           <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-16 text-center">
             <div className="w-20 h-20 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-3xl flex items-center justify-center mx-auto mb-5">
@@ -237,7 +557,7 @@ export default function Ledger() {
 
         {selectedClient && (
           <>
-            {/* ── Client Banner ── */}
+            {/* Client Banner */}
             <div className="bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 rounded-2xl shadow-xl p-5 sm:p-6 text-white relative overflow-hidden">
               <div className="absolute inset-0 opacity-10" style={{ backgroundImage: 'radial-gradient(circle at 80% 20%, white 0%, transparent 60%)' }} />
               <div className="relative flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -271,7 +591,7 @@ export default function Ledger() {
               </div>
             </div>
 
-            {/* ── 4 KPI Cards ── */}
+            {/* 4 KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
                 { label: 'Total Invoiced', value: `₹${formatAmount(totalInvoiced)}`, color: 'blue', icon: <FileText className="w-4 h-4 text-blue-600" />, bar: 'from-blue-400 to-blue-600', barW: '100%' },
@@ -292,7 +612,7 @@ export default function Ledger() {
               ))}
             </div>
 
-            {/* ── Debit / Credit / Status ── */}
+            {/* Debit / Credit / Status */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {/* Debit */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
@@ -355,7 +675,7 @@ export default function Ledger() {
               </div>
             </div>
 
-            {/* ── Collection Progress ── */}
+            {/* Collection Progress */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2.5">
@@ -376,7 +696,7 @@ export default function Ledger() {
               </div>
             </div>
 
-            {/* ── Invoice Table ── */}
+            {/* Invoice Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
               {/* Table Header */}
               <div className="p-4 sm:p-5 border-b border-slate-100">
