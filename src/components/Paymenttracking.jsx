@@ -39,7 +39,6 @@ export default function PaymentTracking() {
   const [billTypeFilter, setBillTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
 
-  // Track previous payments snapshot to detect any change
   const prevPaymentsRef = useRef([]);
   const isUpdatingRef = useRef(false);
 
@@ -53,7 +52,6 @@ export default function PaymentTracking() {
       collection(db, 'invoices'), 
       (snapshot) => {
         const invoicesData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Sort invoices by creation date (newest first)
         invoicesData.sort((a, b) => {
           const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
           const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
@@ -101,7 +99,6 @@ export default function PaymentTracking() {
     return 'partial';
   };
 
-  // FIXED: Update invoice status based on payments
   const updateInvoiceStatus = async (invoiceId, paymentsSnapshot = payments) => {
     if (isUpdatingRef.current) return;
     
@@ -148,7 +145,6 @@ export default function PaymentTracking() {
     }
   };
 
-  // Sync invoices with payments
   useEffect(() => {
     if (invoices.length === 0 || payments.length === 0) return;
 
@@ -165,7 +161,6 @@ export default function PaymentTracking() {
     })();
   }, [payments, invoices]);
 
-  // FIXED: Handle form submit with proper edit functionality
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -187,7 +182,6 @@ export default function PaymentTracking() {
       const paidSoFar = getTotalPaidForInvoice(inv.id);
 
       if (editId) {
-        // Editing existing payment
         const oldPayment = payments.find(p => p.id === editId);
         if (!oldPayment) {
           setError('Payment record not found');
@@ -210,11 +204,9 @@ export default function PaymentTracking() {
           updatedAt: new Date()
         });
         
-        // Force update invoice status after payment edit
         await updateInvoiceStatus(inv.id);
         setEditId(null);
       } else {
-        // New payment
         const newTotal = paidSoFar + paymentAmount;
         if (newTotal > invoiceTotal) {
           setError(`Payment exceeds invoice total. Max allowed: ₹${formatAmount(invoiceTotal - paidSoFar)}`);
@@ -232,7 +224,6 @@ export default function PaymentTracking() {
         await updateInvoiceStatus(inv.id);
       }
 
-      // Reset form
       setForm({ 
         invoiceId: '', 
         paymentDate: new Date().toISOString().split('T')[0], 
@@ -246,7 +237,6 @@ export default function PaymentTracking() {
     }
   };
 
-  // FIXED: Handle edit - properly loads payment data
   const handleEdit = (payment) => {
     setForm({
       invoiceId: payment.invoiceId || '',
@@ -258,7 +248,6 @@ export default function PaymentTracking() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // FIXED: Handle delete - properly updates invoice after deletion
   const handleDelete = async (id) => {
     if (!confirm('Are you sure you want to delete this payment record?')) return;
     
@@ -266,7 +255,6 @@ export default function PaymentTracking() {
       const payment = payments.find(p => p.id === id);
       if (payment) {
         await deleteDoc(doc(db, 'payments', id));
-        // Force update invoice status after deletion
         await updateInvoiceStatus(payment.invoiceId);
       }
     } catch (err) { 
@@ -285,7 +273,6 @@ export default function PaymentTracking() {
     setShowInvoiceDropdown(false);
   };
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e) => {
       if (showInvoiceDropdown && !e.target.closest('.invoice-dropdown-container'))
@@ -295,7 +282,6 @@ export default function PaymentTracking() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showInvoiceDropdown]);
 
-  // Derived values for selected invoice
   const selectedInvoice = invoices.find(i => i.id === form.invoiceId);
   const selectedClient = selectedInvoice ? clients.find(c => c.id === selectedInvoice.clientId) : null;
 
@@ -311,7 +297,6 @@ export default function PaymentTracking() {
     ? getInvoicePaymentStatus(selectedInvoice)
     : null;
 
-  // UI Helpers
   const getMethodIcon = (method) => {
     switch(method) {
       case 'bank': return <CreditCard className="w-3 h-3 sm:w-4 sm:h-4" />;
@@ -355,7 +340,6 @@ export default function PaymentTracking() {
     }
   };
 
-  // Aggregates
   const debitTotal = payments
     .filter(p => invoices.find(i => i.id === p.invoiceId)?.billType === 'debit')
     .reduce((sum, p) => sum + (p.amount || 0), 0);
@@ -375,27 +359,18 @@ export default function PaymentTracking() {
     return true;
   });
 
-  // MODIFIED: Filter invoices for dropdown - only show partial and unpaid invoices
-  // Also sort by recent invoices first
   const filteredInvoicesForDropdown = invoices
     .filter(invoice => {
-      // Only show invoices that are partial or unpaid
       const status = invoice.status || 'unpaid';
       if (status === 'paid') return false;
-      
-      // Apply bill type filter if selected
       if (billTypeFilter !== 'all' && invoice.billType !== billTypeFilter) return false;
-      
-      // Apply status filter if selected (but paid invoices are already excluded)
-      if (statusFilter !== 'all' && statusFilter !== 'all') {
-        if (statusFilter === 'paid') return false; // Never show paid invoices in dropdown
+      if (statusFilter !== 'all') {
+        if (statusFilter === 'paid') return false;
         if (statusFilter !== status) return false;
       }
-      
       return true;
     })
     .sort((a, b) => {
-      // Sort by created date (newest first)
       const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
       const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
       return dateB - dateA;
@@ -716,7 +691,6 @@ export default function PaymentTracking() {
             </div>
           </div>
 
-          {/* Invoice & Payment Details preview card - Only show for non-paid invoices */}
           {form.invoiceId && selectedInvoice && paymentStatus && paymentStatus !== 'paid' && (
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-br from-slate-50 to-indigo-50 rounded-lg sm:rounded-xl border border-slate-200">
               <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 flex items-center gap-1.5">
@@ -844,17 +818,17 @@ export default function PaymentTracking() {
                               {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
                             </span>
                           ) : <span className="text-xs text-slate-400">—</span>}
-                        20</td>
+                        </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border ${getStatusColor(invStatus)}`}>
                             {getStatusIcon(invStatus)}{invStatus}
                           </span>
-                        20</td>
+                        </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className="text-base lg:text-lg font-semibold text-emerald-600">
                             ₹{payment.amount?.toLocaleString('en-IN')}
                           </span>
-                        20</td>
+                        </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           {invStatus === 'partial' ? (
                             <div>
@@ -870,13 +844,13 @@ export default function PaymentTracking() {
                           ) : (
                             <div className="text-xs text-rose-600 font-medium">No payments</div>
                           )}
-                        20</td>
+                        </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-slate-600 text-xs sm:text-sm">{payment.paymentDate}</td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-medium border ${getMethodBadgeColor(payment.method)}`}>
                             {getMethodIcon(payment.method)}<span className="capitalize">{payment.method}</span>
                           </span>
-                        20</td>
+                        </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <div className="flex items-center gap-1.5 sm:gap-2">
                             <button onClick={() => handleEdit(payment)}
@@ -888,7 +862,7 @@ export default function PaymentTracking() {
                               <Trash2 className="w-3.5 h-3.5 lg:w-4 lg:h-4" />
                             </button>
                           </div>
-                        20</td>
+                        </td>
                       </tr>
                     );
                   })
