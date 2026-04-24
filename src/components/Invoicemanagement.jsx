@@ -1106,6 +1106,8 @@ export default function InvoiceManagement() {
     setSelectedArchiveMonth(archive.monthName);
     setSelectedArchiveYear(archive.year);
     setArchiveInvoices(archive.invoices || []);
+    setSelectedDate(null);
+    setFilteredInvoices([]);
   };
 
   const hideArchiveMonth = () => {
