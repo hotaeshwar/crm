@@ -110,11 +110,9 @@ export default function Ledger() {
     const invoiceTotal = inv.total || inv.amount || 0;
     const paymentsForInvoice = getPaymentsForInvoice(inv.id);
     
-    // If there are payment records, use those
     if (paymentsForInvoice > 0) {
       return sum + Math.min(paymentsForInvoice, invoiceTotal);
     }
-    // Otherwise use the amountReceived from invoice
     if (inv.status === 'paid') return sum + invoiceTotal;
     if (inv.status === 'partial') return sum + (inv.amountReceived || 0);
     return sum;
@@ -176,245 +174,251 @@ export default function Ledger() {
     </span>
   );
 
-  // Export to PDF only
+  // Export to PDF only - Fixed autoTable implementation
   const downloadPDF = () => {
     if (!selectedClient) {
       showToast('Please select a client first', 'error');
       return;
     }
 
-    const pdfDoc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-    
-    const pageWidth = pdfDoc.internal.pageSize.getWidth();
-    const pageHeight = pdfDoc.internal.pageSize.getHeight();
-    const leftMargin = 15;
-    const rightMargin = 15;
-    const contentWidth = pageWidth - leftMargin - rightMargin;
-    let yPos = 15;
-
-    // Header with gradient effect
-    pdfDoc.setFillColor(79, 70, 229);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 50, 5, 5, 'F');
-    pdfDoc.setTextColor(255, 255, 255);
-    pdfDoc.setFontSize(24);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('CLIENT LEDGER', leftMargin + contentWidth/2, yPos + 18, { align: 'center' });
-    pdfDoc.setFontSize(12);
-    pdfDoc.text(selectedClient.name, leftMargin + contentWidth/2, yPos + 33, { align: 'center' });
-    if (selectedClient.company) {
-      pdfDoc.setFontSize(10);
-      pdfDoc.text(selectedClient.company, leftMargin + contentWidth/2, yPos + 45, { align: 'center' });
-    }
-    yPos += 60;
-
-    // Client Details Section
-    pdfDoc.setFillColor(245, 245, 245);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 38, 3, 3, 'F');
-    pdfDoc.setTextColor(79, 70, 229);
-    pdfDoc.setFontSize(12);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('CLIENT DETAILS', leftMargin + 5, yPos + 8);
-    pdfDoc.setFontSize(10);
-    pdfDoc.setFont(undefined, 'normal');
-    pdfDoc.setTextColor(0, 0, 0);
-    
-    let detailY = yPos + 18;
-    pdfDoc.text(`Name: ${selectedClient.name}`, leftMargin + 5, detailY);
-    if (selectedClient.company) pdfDoc.text(`Company: ${selectedClient.company}`, leftMargin + 80, detailY);
-    detailY += 7;
-    if (selectedClient.email) pdfDoc.text(`Email: ${selectedClient.email}`, leftMargin + 5, detailY);
-    if (selectedClient.phone) pdfDoc.text(`Phone: ${selectedClient.phone}`, leftMargin + 80, detailY);
-    
-    yPos += 48;
-
-    // Financial Summary Section
-    pdfDoc.setFillColor(245, 245, 245);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 45, 3, 3, 'F');
-    pdfDoc.setTextColor(79, 70, 229);
-    pdfDoc.setFontSize(12);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('FINANCIAL SUMMARY', leftMargin + 5, yPos + 8);
-    
-    pdfDoc.setFontSize(9);
-    pdfDoc.setTextColor(0, 0, 0);
-    const summaryX = leftMargin + 5;
-    let summaryY = yPos + 18;
-    
-    pdfDoc.text(`Total Quoted/Invoiced: ${formatAmountWithCurrency(totalQuoted)}`, summaryX, summaryY);
-    pdfDoc.text(`Total Received: ${formatAmountWithCurrency(totalReceived)}`, summaryX + 70, summaryY);
-    pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, summaryX + 140, summaryY);
-    summaryY += 7;
-    pdfDoc.text(`Collection Rate: ${collectionRate}%`, summaryX, summaryY);
-    summaryY += 7;
-    pdfDoc.text(`Debit - Quoted: ${formatAmountWithCurrency(debitQuoted)} | Received: ${formatAmountWithCurrency(debitReceived)}`, summaryX, summaryY);
-    summaryY += 5;
-    pdfDoc.text(`Credit - Quoted: ${formatAmountWithCurrency(creditQuoted)} | Received: ${formatAmountWithCurrency(creditReceived)}`, summaryX, summaryY);
-    
-    yPos += 55;
-
-    // Invoice Summary Stats
-    pdfDoc.setFillColor(79, 70, 229);
-    pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 14, 2, 2, 'F');
-    pdfDoc.setTextColor(255, 255, 255);
-    pdfDoc.setFontSize(13);
-    pdfDoc.setFont(undefined, 'bold');
-    pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth/2, yPos + 10, { align: 'center' });
-    yPos += 20;
-
-    pdfDoc.setTextColor(0, 0, 0);
-    pdfDoc.setFontSize(9);
-    pdfDoc.setFont(undefined, 'normal');
-    
-    const stats = [
-      { label: 'Paid', value: paidCount, color: [76, 175, 80] },
-      { label: 'Partial', value: partialCount, color: [255, 152, 0] },
-      { label: 'Unpaid', value: unpaidCount, color: [244, 67, 54] },
-      { label: 'Total', value: clientInvoices.length, color: [79, 70, 229] }
-    ];
-    
-    const statWidth = contentWidth / stats.length;
-    stats.forEach((stat, idx) => {
-      const statX = leftMargin + (idx * statWidth);
-      pdfDoc.setFillColor(...stat.color);
-      pdfDoc.roundedRect(statX + 2, yPos, statWidth - 4, 24, 3, 3, 'F');
-      pdfDoc.setTextColor(255, 255, 255);
-      pdfDoc.setFontSize(18);
-      pdfDoc.setFont(undefined, 'bold');
-      pdfDoc.text(stat.value.toString(), statX + statWidth/2, yPos + 14, { align: 'center' });
-      pdfDoc.setFontSize(9);
-      pdfDoc.text(stat.label, statX + statWidth/2, yPos + 22, { align: 'center' });
-    });
-    
-    yPos += 32;
-
-    // Invoices Table
-    if (filteredInvoices.length > 0) {
-      if (yPos > pageHeight - 50) {
-        pdfDoc.addPage();
-        yPos = 20;
-      }
+    try {
+      const pdfDoc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
       
+      const pageWidth = pdfDoc.internal.pageSize.getWidth();
+      const pageHeight = pdfDoc.internal.pageSize.getHeight();
+      const leftMargin = 15;
+      const rightMargin = 15;
+      const contentWidth = pageWidth - leftMargin - rightMargin;
+      let yPos = 15;
+
+      // Header with gradient effect
       pdfDoc.setFillColor(79, 70, 229);
-      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 12, 2, 2, 'F');
+      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 50, 5, 5, 'F');
       pdfDoc.setTextColor(255, 255, 255);
+      pdfDoc.setFontSize(24);
+      pdfDoc.setFont(undefined, 'bold');
+      pdfDoc.text('CLIENT LEDGER', leftMargin + contentWidth/2, yPos + 18, { align: 'center' });
+      pdfDoc.setFontSize(12);
+      pdfDoc.text(selectedClient.name, leftMargin + contentWidth/2, yPos + 33, { align: 'center' });
+      if (selectedClient.company) {
+        pdfDoc.setFontSize(10);
+        pdfDoc.text(selectedClient.company, leftMargin + contentWidth/2, yPos + 45, { align: 'center' });
+      }
+      yPos += 60;
+
+      // Client Details Section
+      pdfDoc.setFillColor(245, 245, 245);
+      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 38, 3, 3, 'F');
+      pdfDoc.setTextColor(79, 70, 229);
       pdfDoc.setFontSize(12);
       pdfDoc.setFont(undefined, 'bold');
-      pdfDoc.text('INVOICE DETAILS', leftMargin + contentWidth/2, yPos + 8, { align: 'center' });
-      yPos += 18;
+      pdfDoc.text('CLIENT DETAILS', leftMargin + 5, yPos + 8);
+      pdfDoc.setFontSize(10);
+      pdfDoc.setFont(undefined, 'normal');
+      pdfDoc.setTextColor(0, 0, 0);
+      
+      let detailY = yPos + 18;
+      pdfDoc.text(`Name: ${selectedClient.name}`, leftMargin + 5, detailY);
+      if (selectedClient.company) pdfDoc.text(`Company: ${selectedClient.company}`, leftMargin + 80, detailY);
+      detailY += 7;
+      if (selectedClient.email) pdfDoc.text(`Email: ${selectedClient.email}`, leftMargin + 5, detailY);
+      if (selectedClient.phone) pdfDoc.text(`Phone: ${selectedClient.phone}`, leftMargin + 80, detailY);
+      
+      yPos += 48;
 
-      const tableData = filteredInvoices.map(inv => {
-        const invoiceTotal = inv.total || inv.amount || 0;
-        const paymentsForInvoice = getPaymentsForInvoice(inv.id);
-        const received = paymentsForInvoice > 0 
-          ? Math.min(paymentsForInvoice, invoiceTotal) 
-          : inv.status === 'paid' 
-            ? invoiceTotal 
-            : (inv.amountReceived || 0);
-        const remaining = Math.max(0, invoiceTotal - received);
-        const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
-        
-        const billTypeLabel = (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1);
-        
-        return [
-          inv.invoiceNumber || 'N/A',
-          inv.date || 'N/A',
-          services.length > 35 ? services.substring(0, 32) + '...' : services,
-          billTypeLabel,
-          formatAmountWithCurrency(invoiceTotal),
-          formatAmountWithCurrency(received),
-          formatAmountWithCurrency(remaining),
-          inv.status || 'unpaid'
-        ];
-      });
+      // Financial Summary Section
+      pdfDoc.setFillColor(245, 245, 245);
+      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 45, 3, 3, 'F');
+      pdfDoc.setTextColor(79, 70, 229);
+      pdfDoc.setFontSize(12);
+      pdfDoc.setFont(undefined, 'bold');
+      pdfDoc.text('FINANCIAL SUMMARY', leftMargin + 5, yPos + 8);
+      
+      pdfDoc.setFontSize(9);
+      pdfDoc.setTextColor(0, 0, 0);
+      const summaryX = leftMargin + 5;
+      let summaryY = yPos + 18;
+      
+      pdfDoc.text(`Total Quoted/Invoiced: ${formatAmountWithCurrency(totalQuoted)}`, summaryX, summaryY);
+      pdfDoc.text(`Total Received: ${formatAmountWithCurrency(totalReceived)}`, summaryX + 70, summaryY);
+      pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, summaryX + 140, summaryY);
+      summaryY += 7;
+      pdfDoc.text(`Collection Rate: ${collectionRate}%`, summaryX, summaryY);
+      summaryY += 7;
+      pdfDoc.text(`Debit - Quoted: ${formatAmountWithCurrency(debitQuoted)} | Received: ${formatAmountWithCurrency(debitReceived)}`, summaryX, summaryY);
+      summaryY += 5;
+      pdfDoc.text(`Credit - Quoted: ${formatAmountWithCurrency(creditQuoted)} | Received: ${formatAmountWithCurrency(creditReceived)}`, summaryX, summaryY);
+      
+      yPos += 55;
 
-      pdfDoc.autoTable({
-        startY: yPos,
-        head: [['Invoice #', 'Date', 'Services', 'Type', 'Quoted', 'Received', 'Outstanding', 'Status']],
-        body: tableData,
-        theme: 'striped',
-        headStyles: {
-          fillColor: [79, 70, 229],
-          textColor: [255, 255, 255],
-          fontSize: 8,
-          fontStyle: 'bold',
-          halign: 'center',
-          cellPadding: 3
-        },
-        bodyStyles: {
-          fontSize: 7,
-          cellPadding: 2.5,
-          valign: 'middle'
-        },
-        alternateRowStyles: {
-          fillColor: [248, 248, 250]
-        },
-        columnStyles: {
-          0: { cellWidth: 32 },
-          1: { cellWidth: 18 },
-          2: { cellWidth: 45 },
-          3: { cellWidth: 16, halign: 'center' },
-          4: { cellWidth: 22, halign: 'right' },
-          5: { cellWidth: 22, halign: 'right' },
-          6: { cellWidth: 22, halign: 'right' },
-          7: { cellWidth: 18, halign: 'center' }
-        },
-        margin: { left: leftMargin, right: rightMargin },
-        didParseCell: (data) => {
-          // Color coding for bill type column
-          if (data.column.index === 3 && data.row.index > 0) {
-            const invoice = filteredInvoices[data.row.index - 1];
-            if (invoice?.billType === 'debit') {
-              data.cell.styles.textColor = [200, 0, 0];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (invoice?.billType === 'credit') {
-              data.cell.styles.textColor = [0, 100, 0];
-              data.cell.styles.fontStyle = 'bold';
-            }
-          }
-          // Color coding for status column
-          if (data.column.index === 7 && data.row.index > 0) {
-            const invoice = filteredInvoices[data.row.index - 1];
-            if (invoice?.status === 'paid') {
-              data.cell.styles.textColor = [76, 175, 80];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (invoice?.status === 'partial') {
-              data.cell.styles.textColor = [255, 152, 0];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (invoice?.status === 'unpaid') {
-              data.cell.styles.textColor = [244, 67, 54];
-              data.cell.styles.fontStyle = 'bold';
-            }
-          }
-        },
-        didDrawPage: (data) => {
-          const footerY = pdfDoc.internal.pageSize.getHeight() - 10;
-          pdfDoc.setFontSize(8);
-          pdfDoc.setTextColor(150, 150, 150);
-          pdfDoc.text(`Generated on ${new Date().toLocaleString()}`, leftMargin, footerY);
-          pdfDoc.text(`Page ${pdfDoc.internal.getNumberOfPages()}`, pageWidth - rightMargin, footerY, { align: 'right' });
-        }
+      // Invoice Summary Stats
+      pdfDoc.setFillColor(79, 70, 229);
+      pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 14, 2, 2, 'F');
+      pdfDoc.setTextColor(255, 255, 255);
+      pdfDoc.setFontSize(13);
+      pdfDoc.setFont(undefined, 'bold');
+      pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth/2, yPos + 10, { align: 'center' });
+      yPos += 20;
+
+      pdfDoc.setTextColor(0, 0, 0);
+      pdfDoc.setFontSize(9);
+      pdfDoc.setFont(undefined, 'normal');
+      
+      const stats = [
+        { label: 'Paid', value: paidCount, color: [76, 175, 80] },
+        { label: 'Partial', value: partialCount, color: [255, 152, 0] },
+        { label: 'Unpaid', value: unpaidCount, color: [244, 67, 54] },
+        { label: 'Total', value: clientInvoices.length, color: [79, 70, 229] }
+      ];
+      
+      const statWidth = contentWidth / stats.length;
+      stats.forEach((stat, idx) => {
+        const statX = leftMargin + (idx * statWidth);
+        pdfDoc.setFillColor(...stat.color);
+        pdfDoc.roundedRect(statX + 2, yPos, statWidth - 4, 24, 3, 3, 'F');
+        pdfDoc.setTextColor(255, 255, 255);
+        pdfDoc.setFontSize(18);
+        pdfDoc.setFont(undefined, 'bold');
+        pdfDoc.text(stat.value.toString(), statX + statWidth/2, yPos + 14, { align: 'center' });
+        pdfDoc.setFontSize(9);
+        pdfDoc.text(stat.label, statX + statWidth/2, yPos + 22, { align: 'center' });
       });
       
-      yPos = pdfDoc.lastAutoTable.finalY + 10;
+      yPos += 32;
+
+      // Invoices Table - Using autoTable correctly
+      if (filteredInvoices.length > 0) {
+        if (yPos > pageHeight - 50) {
+          pdfDoc.addPage();
+          yPos = 20;
+        }
+        
+        pdfDoc.setFillColor(79, 70, 229);
+        pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 12, 2, 2, 'F');
+        pdfDoc.setTextColor(255, 255, 255);
+        pdfDoc.setFontSize(12);
+        pdfDoc.setFont(undefined, 'bold');
+        pdfDoc.text('INVOICE DETAILS', leftMargin + contentWidth/2, yPos + 8, { align: 'center' });
+        yPos += 18;
+
+        const tableData = filteredInvoices.map(inv => {
+          const invoiceTotal = inv.total || inv.amount || 0;
+          const paymentsForInvoice = getPaymentsForInvoice(inv.id);
+          const received = paymentsForInvoice > 0 
+            ? Math.min(paymentsForInvoice, invoiceTotal) 
+            : inv.status === 'paid' 
+              ? invoiceTotal 
+              : (inv.amountReceived || 0);
+          const remaining = Math.max(0, invoiceTotal - received);
+          const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
+          
+          const billTypeLabel = (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1);
+          
+          return [
+            inv.invoiceNumber || 'N/A',
+            inv.date || 'N/A',
+            services.length > 35 ? services.substring(0, 32) + '...' : services,
+            billTypeLabel,
+            formatAmountWithCurrency(invoiceTotal),
+            formatAmountWithCurrency(received),
+            formatAmountWithCurrency(remaining),
+            inv.status || 'unpaid'
+          ];
+        });
+
+        // Use autoTable as a method of the pdfDoc instance
+        pdfDoc.autoTable({
+          startY: yPos,
+          head: [['Invoice #', 'Date', 'Services', 'Type', 'Quoted', 'Received', 'Outstanding', 'Status']],
+          body: tableData,
+          theme: 'striped',
+          headStyles: {
+            fillColor: [79, 70, 229],
+            textColor: [255, 255, 255],
+            fontSize: 8,
+            fontStyle: 'bold',
+            halign: 'center',
+            cellPadding: 3
+          },
+          bodyStyles: {
+            fontSize: 7,
+            cellPadding: 2.5,
+            valign: 'middle'
+          },
+          alternateRowStyles: {
+            fillColor: [248, 248, 250]
+          },
+          columnStyles: {
+            0: { cellWidth: 32 },
+            1: { cellWidth: 18 },
+            2: { cellWidth: 45 },
+            3: { cellWidth: 16, halign: 'center' },
+            4: { cellWidth: 22, halign: 'right' },
+            5: { cellWidth: 22, halign: 'right' },
+            6: { cellWidth: 22, halign: 'right' },
+            7: { cellWidth: 18, halign: 'center' }
+          },
+          margin: { left: leftMargin, right: rightMargin },
+          didParseCell: (data) => {
+            // Color coding for bill type column
+            if (data.column.index === 3 && data.row.index > 0) {
+              const invoice = filteredInvoices[data.row.index - 1];
+              if (invoice?.billType === 'debit') {
+                data.cell.styles.textColor = [200, 0, 0];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (invoice?.billType === 'credit') {
+                data.cell.styles.textColor = [0, 100, 0];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+            // Color coding for status column
+            if (data.column.index === 7 && data.row.index > 0) {
+              const invoice = filteredInvoices[data.row.index - 1];
+              if (invoice?.status === 'paid') {
+                data.cell.styles.textColor = [76, 175, 80];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (invoice?.status === 'partial') {
+                data.cell.styles.textColor = [255, 152, 0];
+                data.cell.styles.fontStyle = 'bold';
+              } else if (invoice?.status === 'unpaid') {
+                data.cell.styles.textColor = [244, 67, 54];
+                data.cell.styles.fontStyle = 'bold';
+              }
+            }
+          },
+          didDrawPage: (data) => {
+            const footerY = pdfDoc.internal.pageSize.getHeight() - 10;
+            pdfDoc.setFontSize(8);
+            pdfDoc.setTextColor(150, 150, 150);
+            pdfDoc.text(`Generated on ${new Date().toLocaleString()}`, leftMargin, footerY);
+            pdfDoc.text(`Page ${pdfDoc.internal.getNumberOfPages()}`, pageWidth - rightMargin, footerY, { align: 'right' });
+          }
+        });
+        
+        yPos = pdfDoc.lastAutoTable.finalY + 10;
+      }
+
+      // Footer
+      const finalY = Math.min(yPos + 10, pageHeight - 25);
+      pdfDoc.setDrawColor(79, 70, 229);
+      pdfDoc.setLineWidth(0.5);
+      pdfDoc.line(leftMargin, finalY, leftMargin + contentWidth, finalY);
+      pdfDoc.setFontSize(8);
+      pdfDoc.setTextColor(100, 100, 100);
+      pdfDoc.text('Building India Digital - Client Ledger Statement', leftMargin + contentWidth/2, finalY + 5, { align: 'center' });
+      pdfDoc.setFontSize(7);
+      pdfDoc.text('This is a computer generated statement and does not require a signature.', leftMargin + contentWidth/2, finalY + 10, { align: 'center' });
+
+      pdfDoc.save(`Ledger_${selectedClient.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
+      showToast(`Ledger PDF downloaded for ${selectedClient.name}`, 'success');
+    } catch (error) {
+      console.error('PDF Generation Error:', error);
+      showToast('Error generating PDF. Please try again.', 'error');
     }
-
-    // Footer
-    const finalY = Math.min(yPos + 10, pageHeight - 25);
-    pdfDoc.setDrawColor(79, 70, 229);
-    pdfDoc.setLineWidth(0.5);
-    pdfDoc.line(leftMargin, finalY, leftMargin + contentWidth, finalY);
-    pdfDoc.setFontSize(8);
-    pdfDoc.setTextColor(100, 100, 100);
-    pdfDoc.text('Building India Digital - Client Ledger Statement', leftMargin + contentWidth/2, finalY + 5, { align: 'center' });
-    pdfDoc.setFontSize(7);
-    pdfDoc.text('This is a computer generated statement and does not require a signature.', leftMargin + contentWidth/2, finalY + 10, { align: 'center' });
-
-    pdfDoc.save(`Ledger_${selectedClient.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
-    showToast(`Ledger PDF downloaded for ${selectedClient.name}`, 'success');
   };
 
   const filterButtons = [
@@ -589,7 +593,7 @@ export default function Ledger() {
               </div>
             </div>
 
-            {/* 4 KPI Cards - Updated to show Quoted vs Received */}
+            {/* 4 KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               {[
                 { label: 'Total Quoted', value: `₹${formatAmount(totalQuoted)}`, color: 'blue', icon: <FileText className="w-4 h-4 text-blue-600" />, bar: 'from-blue-400 to-blue-600', barW: '100%' },
