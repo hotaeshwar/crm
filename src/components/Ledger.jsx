@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot } from 'firebase/firestore';
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import {
   BookOpen,
   User,
@@ -29,7 +29,6 @@ import {
   Download
 } from 'lucide-react';
 
-// Toast notification component
 const Toast = ({ message, type, onClose }) => {
   useEffect(() => {
     const timer = setTimeout(onClose, 3000);
@@ -55,8 +54,6 @@ export default function Ledger() {
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
-  
-  // Toast state
   const [toast, setToast] = useState(null);
 
   const showToast = (message, type = 'success') => {
@@ -81,9 +78,7 @@ export default function Ledger() {
     return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(num);
   };
 
-  const formatAmountWithCurrency = (amount) => {
-    return `Rs. ${formatAmount(amount)}`;
-  };
+  const formatAmountWithCurrency = (amount) => `Rs. ${formatAmount(amount)}`;
 
   const getPaidForInvoice = (invoiceId) =>
     payments
@@ -149,19 +144,13 @@ export default function Ledger() {
     </span>
   );
 
-  // ── PDF DOWNLOAD (logo + company header matching InvoiceManagement) ────────
   const downloadPDF = async () => {
     if (!selectedClient) {
       showToast('Please select a client first', 'error');
       return;
     }
 
-    const pdfDoc = new jsPDF({
-      orientation: 'portrait',
-      unit: 'mm',
-      format: 'a4'
-    });
-
+    const pdfDoc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
     const pageWidth = pdfDoc.internal.pageSize.getWidth();
     const pageHeight = pdfDoc.internal.pageSize.getHeight();
     const leftMargin = 15;
@@ -189,23 +178,16 @@ export default function Ledger() {
       pdfDoc.setTextColor(0, 0, 0);
       pdfDoc.setFontSize(10);
       pdfDoc.setFont(undefined, 'bold');
-
       let infoY = yPos + 5;
-      pdfDoc.text('SCO 246, Devaji Plaza, VIP Road', infoStartX, infoY);
-      infoY += 5;
-      pdfDoc.text('Zirakpur, India', infoStartX, infoY);
-      infoY += 5;
-      pdfDoc.text('marketing@buildingindiadigital.com', infoStartX, infoY);
-      infoY += 5;
-      pdfDoc.text('For any enquiry, Call Us:', infoStartX, infoY);
-      infoY += 5;
+      pdfDoc.text('SCO 246, Devaji Plaza, VIP Road', infoStartX, infoY); infoY += 5;
+      pdfDoc.text('Zirakpur, India', infoStartX, infoY); infoY += 5;
+      pdfDoc.text('marketing@buildingindiadigital.com', infoStartX, infoY); infoY += 5;
+      pdfDoc.text('For any enquiry, Call Us:', infoStartX, infoY); infoY += 5;
       pdfDoc.setFontSize(11);
-      pdfDoc.text('+919041499964', infoStartX, infoY);
-      infoY += 5;
+      pdfDoc.text('+919041499964', infoStartX, infoY); infoY += 5;
       pdfDoc.text('+919041499973', infoStartX, infoY);
-
       yPos += Math.max(logoHeight, infoY - yPos) + 15;
-    } catch (error) {
+    } catch {
       const fallbackHeight = 50;
       pdfDoc.setFillColor(255, 152, 0);
       pdfDoc.roundedRect(logoStartX, yPos, logoWidth, fallbackHeight, 3, 3, 'F');
@@ -218,21 +200,14 @@ export default function Ledger() {
       pdfDoc.setTextColor(0, 0, 0);
       pdfDoc.setFontSize(10);
       pdfDoc.setFont(undefined, 'bold');
-
       let infoY = yPos + 5;
-      pdfDoc.text('SCO 246, Devaji Plaza, VIP Road', infoStartX, infoY);
-      infoY += 5;
-      pdfDoc.text('Zirakpur, India', infoStartX, infoY);
-      infoY += 5;
-      pdfDoc.text('marketing@buildingindiadigital.com', infoStartX, infoY);
-      infoY += 5;
-      pdfDoc.text('For any enquiry, Call Us:', infoStartX, infoY);
-      infoY += 5;
+      pdfDoc.text('SCO 246, Devaji Plaza, VIP Road', infoStartX, infoY); infoY += 5;
+      pdfDoc.text('Zirakpur, India', infoStartX, infoY); infoY += 5;
+      pdfDoc.text('marketing@buildingindiadigital.com', infoStartX, infoY); infoY += 5;
+      pdfDoc.text('For any enquiry, Call Us:', infoStartX, infoY); infoY += 5;
       pdfDoc.setFontSize(11);
-      pdfDoc.text('+919041499964', infoStartX, infoY);
-      infoY += 5;
+      pdfDoc.text('+919041499964', infoStartX, infoY); infoY += 5;
       pdfDoc.text('+919041499973', infoStartX, infoY);
-
       yPos += Math.max(fallbackHeight, infoY - yPos) + 15;
     }
 
@@ -245,7 +220,7 @@ export default function Ledger() {
     pdfDoc.text('CLIENT LEDGER', leftMargin + contentWidth / 2, yPos + 10, { align: 'center' });
     yPos += 22;
 
-    // ── Client Details Section ──────────────────────────────────────────────
+    // ── Client Details ──────────────────────────────────────────────────────
     pdfDoc.setFillColor(245, 245, 245);
     pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 38, 3, 3, 'F');
     pdfDoc.setTextColor(79, 70, 229);
@@ -255,37 +230,31 @@ export default function Ledger() {
     pdfDoc.setFontSize(10);
     pdfDoc.setFont(undefined, 'normal');
     pdfDoc.setTextColor(0, 0, 0);
-
     let detailY = yPos + 18;
     pdfDoc.text(`Name: ${selectedClient.name}`, leftMargin + 5, detailY);
     if (selectedClient.company) pdfDoc.text(`Company: ${selectedClient.company}`, leftMargin + 80, detailY);
     detailY += 7;
     if (selectedClient.email) pdfDoc.text(`Email: ${selectedClient.email}`, leftMargin + 5, detailY);
     if (selectedClient.phone) pdfDoc.text(`Phone: ${selectedClient.phone}`, leftMargin + 80, detailY);
-
     yPos += 48;
 
-    // ── Financial Summary Section ───────────────────────────────────────────
+    // ── Financial Summary ───────────────────────────────────────────────────
     pdfDoc.setFillColor(245, 245, 245);
     pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 35, 3, 3, 'F');
     pdfDoc.setTextColor(79, 70, 229);
     pdfDoc.setFontSize(12);
     pdfDoc.setFont(undefined, 'bold');
     pdfDoc.text('FINANCIAL SUMMARY', leftMargin + 5, yPos + 8);
-
     pdfDoc.setFontSize(9);
     pdfDoc.setTextColor(0, 0, 0);
-    const summaryX = leftMargin + 5;
     let summaryY = yPos + 18;
-
-    pdfDoc.text(`Total Invoiced: ${formatAmountWithCurrency(totalInvoiced)}`, summaryX, summaryY);
-    pdfDoc.text(`Total Collected: ${formatAmountWithCurrency(totalCollected)}`, summaryX + 70, summaryY);
-    pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, summaryX + 140, summaryY);
+    pdfDoc.text(`Total Invoiced: ${formatAmountWithCurrency(totalInvoiced)}`, leftMargin + 5, summaryY);
+    pdfDoc.text(`Total Collected: ${formatAmountWithCurrency(totalCollected)}`, leftMargin + 75, summaryY);
+    pdfDoc.text(`Total Outstanding: ${formatAmountWithCurrency(totalOutstanding)}`, leftMargin + 145, summaryY);
     summaryY += 7;
-    pdfDoc.text(`Collection Rate: ${collectionRate}%`, summaryX, summaryY);
-    pdfDoc.text(`Debit Total: ${formatAmountWithCurrency(debitTotal)}`, summaryX + 70, summaryY);
-    pdfDoc.text(`Credit Total: ${formatAmountWithCurrency(creditTotal)}`, summaryX + 140, summaryY);
-
+    pdfDoc.text(`Collection Rate: ${collectionRate}%`, leftMargin + 5, summaryY);
+    pdfDoc.text(`Debit Total: ${formatAmountWithCurrency(debitTotal)}`, leftMargin + 75, summaryY);
+    pdfDoc.text(`Credit Total: ${formatAmountWithCurrency(creditTotal)}`, leftMargin + 145, summaryY);
     yPos += 45;
 
     // ── Invoice Summary Stats ───────────────────────────────────────────────
@@ -297,20 +266,15 @@ export default function Ledger() {
     pdfDoc.text('INVOICE SUMMARY', leftMargin + contentWidth / 2, yPos + 10, { align: 'center' });
     yPos += 20;
 
-    pdfDoc.setTextColor(0, 0, 0);
-    pdfDoc.setFontSize(9);
-    pdfDoc.setFont(undefined, 'normal');
-
     const stats = [
       { label: 'Paid', value: paidCount, color: [76, 175, 80] },
       { label: 'Partial', value: partialCount, color: [255, 152, 0] },
       { label: 'Unpaid', value: unpaidCount, color: [244, 67, 54] },
       { label: 'Total', value: clientInvoices.length, color: [79, 70, 229] }
     ];
-
     const statWidth = contentWidth / stats.length;
     stats.forEach((stat, idx) => {
-      const statX = leftMargin + (idx * statWidth);
+      const statX = leftMargin + idx * statWidth;
       pdfDoc.setFillColor(...stat.color);
       pdfDoc.roundedRect(statX + 2, yPos, statWidth - 4, 24, 3, 3, 'F');
       pdfDoc.setTextColor(255, 255, 255);
@@ -320,15 +284,11 @@ export default function Ledger() {
       pdfDoc.setFontSize(9);
       pdfDoc.text(stat.label, statX + statWidth / 2, yPos + 22, { align: 'center' });
     });
-
     yPos += 32;
 
     // ── Invoices Table ──────────────────────────────────────────────────────
     if (filteredInvoices.length > 0) {
-      if (yPos > pageHeight - 50) {
-        pdfDoc.addPage();
-        yPos = 20;
-      }
+      if (yPos > pageHeight - 50) { pdfDoc.addPage(); yPos = 20; }
 
       pdfDoc.setFillColor(79, 70, 229);
       pdfDoc.roundedRect(leftMargin, yPos, contentWidth, 12, 2, 2, 'F');
@@ -345,7 +305,6 @@ export default function Ledger() {
         const remaining = Math.max(0, invoiceTotal - paid);
         const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
         const billTypeLabel = (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1);
-
         return [
           inv.invoiceNumber || 'N/A',
           inv.date || 'N/A',
@@ -358,7 +317,7 @@ export default function Ledger() {
         ];
       });
 
-      pdfDoc.autoTable({
+      autoTable(pdfDoc, {
         startY: yPos,
         head: [['Invoice #', 'Date', 'Services', 'Type', 'Total', 'Paid', 'Due', 'Status']],
         body: tableData,
@@ -371,14 +330,8 @@ export default function Ledger() {
           halign: 'center',
           cellPadding: 3
         },
-        bodyStyles: {
-          fontSize: 7,
-          cellPadding: 2.5,
-          valign: 'middle'
-        },
-        alternateRowStyles: {
-          fillColor: [248, 248, 250]
-        },
+        bodyStyles: { fontSize: 7, cellPadding: 2.5, valign: 'middle' },
+        alternateRowStyles: { fillColor: [248, 248, 250] },
         columnStyles: {
           0: { cellWidth: 32 },
           1: { cellWidth: 18 },
@@ -393,29 +346,17 @@ export default function Ledger() {
         didParseCell: (data) => {
           if (data.column.index === 3 && data.row.index > 0) {
             const invoice = filteredInvoices[data.row.index - 1];
-            if (invoice?.billType === 'debit') {
-              data.cell.styles.textColor = [200, 0, 0];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (invoice?.billType === 'credit') {
-              data.cell.styles.textColor = [0, 100, 0];
-              data.cell.styles.fontStyle = 'bold';
-            }
+            if (invoice?.billType === 'debit') { data.cell.styles.textColor = [200, 0, 0]; data.cell.styles.fontStyle = 'bold'; }
+            else if (invoice?.billType === 'credit') { data.cell.styles.textColor = [0, 100, 0]; data.cell.styles.fontStyle = 'bold'; }
           }
           if (data.column.index === 7 && data.row.index > 0) {
             const invoice = filteredInvoices[data.row.index - 1];
-            if (invoice?.status === 'paid') {
-              data.cell.styles.textColor = [76, 175, 80];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (invoice?.status === 'partial') {
-              data.cell.styles.textColor = [255, 152, 0];
-              data.cell.styles.fontStyle = 'bold';
-            } else if (invoice?.status === 'unpaid') {
-              data.cell.styles.textColor = [244, 67, 54];
-              data.cell.styles.fontStyle = 'bold';
-            }
+            if (invoice?.status === 'paid') { data.cell.styles.textColor = [76, 175, 80]; data.cell.styles.fontStyle = 'bold'; }
+            else if (invoice?.status === 'partial') { data.cell.styles.textColor = [255, 152, 0]; data.cell.styles.fontStyle = 'bold'; }
+            else if (invoice?.status === 'unpaid') { data.cell.styles.textColor = [244, 67, 54]; data.cell.styles.fontStyle = 'bold'; }
           }
         },
-        didDrawPage: (data) => {
+        didDrawPage: () => {
           const footerY = pdfDoc.internal.pageSize.getHeight() - 10;
           pdfDoc.setFontSize(8);
           pdfDoc.setTextColor(150, 150, 150);
@@ -454,41 +395,24 @@ export default function Ledger() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
       <div className="px-3 py-4 sm:px-5 sm:py-6 md:px-8 md:py-8 max-w-[1400px] mx-auto space-y-4 sm:space-y-5">
-        
-        {/* Toast */}
-        {toast && (
-          <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
-        )}
+
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
 
         {/* Page Header */}
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg flex-shrink-0">
-              <BookOpen className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Client Ledger</h1>
-              <p className="text-sm text-slate-500 mt-0.5">Complete financial summary per client</p>
-            </div>
+        <div className="flex items-center gap-4">
+          <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-2xl shadow-lg flex-shrink-0">
+            <BookOpen className="w-6 h-6 text-white" />
           </div>
-          
-          {/* Download PDF Button - Only show when client is selected */}
-          {selectedClient && (
-            <button
-              onClick={downloadPDF}
-              className="px-4 sm:px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center gap-2 text-sm font-semibold shadow-lg hover:shadow-xl"
-            >
-              <Download className="w-4 h-4" />
-              <span>Download PDF</span>
-            </button>
-          )}
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-800 tracking-tight">Client Ledger</h1>
+            <p className="text-sm text-slate-500 mt-0.5">Complete financial summary per client</p>
+          </div>
         </div>
 
         {/* Client Selector */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-4 sm:p-5">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Select Client</p>
           <div className="relative">
-            {/* Trigger */}
             <button
               onClick={() => setShowDropdown(!showDropdown)}
               className="w-full flex items-center justify-between gap-3 px-4 py-3.5 rounded-xl border border-slate-200 bg-slate-50 hover:border-indigo-400 hover:bg-white transition-all text-left"
@@ -523,7 +447,6 @@ export default function Ledger() {
               </div>
             </button>
 
-            {/* Dropdown */}
             {showDropdown && (
               <div className="absolute z-50 w-full mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
                 <div className="p-3 border-b border-slate-100">
@@ -594,14 +517,12 @@ export default function Ledger() {
                     <div className="flex flex-wrap gap-4 mt-1.5">
                       {selectedClient.email && (
                         <span className="text-xs text-indigo-200 flex items-center gap-1.5">
-                          <Mail className="w-3.5 h-3.5 flex-shrink-0" />
-                          {selectedClient.email}
+                          <Mail className="w-3.5 h-3.5 flex-shrink-0" />{selectedClient.email}
                         </span>
                       )}
                       {selectedClient.phone && (
                         <span className="text-xs text-indigo-200 flex items-center gap-1.5">
-                          <Phone className="w-3.5 h-3.5 flex-shrink-0" />
-                          {selectedClient.phone}
+                          <Phone className="w-3.5 h-3.5 flex-shrink-0" />{selectedClient.phone}
                         </span>
                       )}
                     </div>
@@ -637,7 +558,6 @@ export default function Ledger() {
 
             {/* Debit / Credit / Status */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Debit */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2.5">
@@ -656,7 +576,6 @@ export default function Ledger() {
                 <p className="text-[11px] text-slate-400">{totalInvoiced > 0 ? ((debitTotal / totalInvoiced) * 100).toFixed(1) : '0'}% of total</p>
               </div>
 
-              {/* Credit */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2.5">
@@ -675,7 +594,6 @@ export default function Ledger() {
                 <p className="text-[11px] text-slate-400">{totalInvoiced > 0 ? ((creditTotal / totalInvoiced) * 100).toFixed(1) : '0'}% of total</p>
               </div>
 
-              {/* Payment Status */}
               <div className="bg-white rounded-2xl shadow-sm border border-slate-100 p-5">
                 <div className="flex items-center gap-2.5 mb-4">
                   <div className="p-2 bg-indigo-50 rounded-xl"><BarChart3 className="w-4 h-4 text-indigo-600" /></div>
@@ -729,10 +647,18 @@ export default function Ledger() {
                     <h3 className="text-base font-bold text-slate-800">Invoice History</h3>
                     <span className="text-xs text-slate-400 font-normal">({filteredInvoices.length} shown)</span>
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                    <SlidersHorizontal className="w-3.5 h-3.5" />
-                    <span>Filter by</span>
-                  </div>
+                  {/* ── PDF Download button lives here in the table header ── */}
+                  <button
+                    onClick={downloadPDF}
+                    className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl hover:from-indigo-700 hover:to-purple-700 transition-all flex items-center gap-2 text-sm font-semibold shadow-md hover:shadow-lg"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download PDF
+                  </button>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Filter by</span>
                 </div>
                 <div className="flex gap-1.5 flex-wrap">
                   {filterButtons.map(f => (
@@ -794,8 +720,7 @@ export default function Ledger() {
                               </td>
                               <td className="px-4 py-3.5">
                                 <div className="flex items-center gap-1.5 text-xs text-slate-500 whitespace-nowrap">
-                                  <Calendar className="w-3 h-3 text-slate-400" />
-                                  {invoice.date || '—'}
+                                  <Calendar className="w-3 h-3 text-slate-400" />{invoice.date || '—'}
                                 </div>
                               </td>
                               <td className="px-4 py-3.5 max-w-[180px]">
