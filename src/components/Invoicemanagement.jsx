@@ -210,13 +210,11 @@ export default function InvoiceManagement() {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const range = XLSX.utils.decode_range(worksheet['!ref']);
     
-    // Apply colors to each data row based on bill type
     invoicesToExport.forEach((inv, rowIdx) => {
       const excelRow = rowIdx + 1;
       const billType = inv.billType || 'none';
       
       if (billType === 'debit') {
-        // Debit rows - Light Red background with Dark Red text
         for (let col = range.s.c; col <= range.e.c; col++) {
           const cellAddr = XLSX.utils.encode_cell({ r: excelRow, c: col });
           if (!worksheet[cellAddr]) continue;
@@ -226,7 +224,6 @@ export default function InvoiceManagement() {
           };
         }
       } else if (billType === 'credit') {
-        // Credit rows - Light Green background with Dark Green text
         for (let col = range.s.c; col <= range.e.c; col++) {
           const cellAddr = XLSX.utils.encode_cell({ r: excelRow, c: col });
           if (!worksheet[cellAddr]) continue;
@@ -238,7 +235,6 @@ export default function InvoiceManagement() {
       }
     });
 
-    // Apply header styling (blue background, white text, bold)
     for (let col = range.s.c; col <= range.e.c; col++) {
       const cellAddr = XLSX.utils.encode_cell({ r: 0, c: col });
       if (!worksheet[cellAddr]) continue;
@@ -386,9 +382,6 @@ export default function InvoiceManagement() {
           new Date(inv.date).getMonth() === month
         );
         const total = monthInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
-        const paid = monthInvoices.filter(inv => inv.status === 'paid').length;
-        const unpaid = monthInvoices.filter(inv => inv.status === 'unpaid').length;
-        const partial = monthInvoices.filter(inv => inv.status === 'partial').length;
         const debitTotal = monthInvoices.filter(inv => inv.billType === 'debit').reduce((s, inv) => s + (inv.total || 0), 0);
         const creditTotal = monthInvoices.filter(inv => inv.billType === 'credit').reduce((s, inv) => s + (inv.total || 0), 0);
         const allDebit = monthInvoices.length > 0 && monthInvoices.every(inv => inv.billType === 'debit');
@@ -396,9 +389,6 @@ export default function InvoiceManagement() {
         return {
           count: monthInvoices.length,
           total,
-          paid,
-          unpaid,
-          partial,
           debitTotal,
           creditTotal,
           allDebit,
@@ -410,9 +400,7 @@ export default function InvoiceManagement() {
         year,
         invoices: yearInvoices,
         monthlySummary,
-        totalAmount: yearInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0),
-        paidAmount: yearInvoices.filter(inv => inv.status === 'paid').reduce((sum, inv) => sum + (inv.total || 0), 0),
-        unpaidAmount: yearInvoices.filter(inv => inv.status === 'unpaid').reduce((sum, inv) => sum + (inv.total || 0), 0)
+        totalAmount: yearInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0)
       };
     });
   };
@@ -1115,7 +1103,6 @@ export default function InvoiceManagement() {
     setArchiveInvoices(archive.invoices || []);
     setSelectedDate(null);
     setFilteredInvoices([]);
-    // Mark this archive month as viewed
     setViewedArchiveMonths(prev => new Set([...prev, archive.id]));
   };
 
@@ -1175,7 +1162,6 @@ export default function InvoiceManagement() {
       
       if (updatedInvoices.length === 0) {
         await deleteDoc(doc(db, 'archived_invoices', archiveId));
-        // Remove from viewed set as well
         setViewedArchiveMonths(prev => {
           const newSet = new Set(prev);
           newSet.delete(archiveId);
@@ -1232,12 +1218,10 @@ export default function InvoiceManagement() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-3 sm:p-4 md:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-        {/* Toast */}
         {toast && (
           <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />
         )}
 
-        {/* Header */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 p-4 sm:p-6 lg:p-8">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div>
@@ -1259,7 +1243,6 @@ export default function InvoiceManagement() {
           </div>
         </div>
 
-        {/* Tab Navigation */}
         <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
           <div className="flex border-b border-slate-200">
             <button
@@ -1305,10 +1288,8 @@ export default function InvoiceManagement() {
           </div>
         </div>
 
-        {/* Invoices Tab Content - Same as before */}
         {activeTab === 'invoices' && (
           <>
-            {/* Create New Invoice Section */}
             <div className="bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 p-4 sm:p-6 lg:p-8">
               <h2 className="text-lg sm:text-xl font-bold text-slate-800 mb-4 sm:mb-6 flex items-center gap-2">
                 <Plus className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
@@ -1317,7 +1298,6 @@ export default function InvoiceManagement() {
 
               <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                  {/* Client */}
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
                       <User className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
@@ -1338,7 +1318,6 @@ export default function InvoiceManagement() {
                     </select>
                   </div>
 
-                  {/* Date */}
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
                       <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
@@ -1352,7 +1331,6 @@ export default function InvoiceManagement() {
                     />
                   </div>
 
-                  {/* Payment Days */}
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
@@ -1368,7 +1346,6 @@ export default function InvoiceManagement() {
                     <p className="text-xs text-slate-500 mt-1">Enter days or "N/A" or "Not Applicable"</p>
                   </div>
 
-                  {/* Tax */}
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
                       <Tag className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
@@ -1384,7 +1361,6 @@ export default function InvoiceManagement() {
                     <p className="text-xs text-slate-500 mt-1">Enter % or "N/A" or "Not Applicable"</p>
                   </div>
 
-                  {/* Status */}
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
                       <AlertCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-600" />
@@ -1401,7 +1377,6 @@ export default function InvoiceManagement() {
                     </select>
                   </div>
 
-                  {/* Bill Type */}
                   <div>
                     <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
                       <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-purple-600" />
@@ -1419,7 +1394,6 @@ export default function InvoiceManagement() {
                     <p className="text-xs text-slate-500 mt-1">Categorize as Debit, Credit, or None</p>
                   </div>
 
-                  {/* Amount Received */}
                   {form.status === 'partial' && (
                     <div>
                       <label className="block text-xs sm:text-sm font-semibold text-slate-700 mb-1.5 sm:mb-2 flex items-center gap-1.5">
@@ -1437,7 +1411,6 @@ export default function InvoiceManagement() {
                   )}
                 </div>
 
-                {/* Add Services Section */}
                 <div className="border-t pt-4 sm:pt-6">
                   <h3 className="text-base sm:text-lg font-bold text-slate-800 mb-3 sm:mb-4 flex items-center gap-2">
                     <Briefcase className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
@@ -1478,7 +1451,6 @@ export default function InvoiceManagement() {
                     </div>
                   </div>
 
-                  {/* Selected Services List */}
                   {form.selectedServices.length > 0 && (
                     <div className="bg-gradient-to-br from-slate-50 to-blue-50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-slate-200">
                       <h4 className="text-xs sm:text-sm font-bold text-slate-700 mb-2 sm:mb-3">
@@ -1545,7 +1517,6 @@ export default function InvoiceManagement() {
                   )}
                 </div>
 
-                {/* Invoice Preview */}
                 {form.selectedServices.length > 0 && (
                   <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg sm:rounded-xl p-3 sm:p-4 border border-blue-200">
                     <h3 className="text-sm sm:text-base font-bold text-slate-800 mb-2 sm:mb-3">Invoice Preview</h3>
@@ -1586,7 +1557,6 @@ export default function InvoiceManagement() {
               </form>
             </div>
 
-            {/* Archive Button */}
             <div className="flex justify-end">
               <button
                 onClick={archiveMonthlyData}
@@ -1597,7 +1567,6 @@ export default function InvoiceManagement() {
               </button>
             </div>
 
-            {/* Desktop Table */}
             <div className="hidden md:block bg-white rounded-xl sm:rounded-2xl shadow-lg border border-slate-200 overflow-hidden">
               <div className="p-4 sm:p-6 border-b border-slate-200">
                 <h2 className="text-lg sm:text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -1799,7 +1768,7 @@ export default function InvoiceManagement() {
                                   )}
                                 </div>
                               )}
-                            <td>
+                            </td>
                             <td className="px-4 py-3">
                               {isEditing ? (
                                 <select
@@ -1871,7 +1840,6 @@ export default function InvoiceManagement() {
               </div>
             </div>
 
-            {/* Mobile Cards */}
             <div className="md:hidden space-y-3 sm:space-y-4">
               <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-4">
                 <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
@@ -2143,7 +2111,6 @@ export default function InvoiceManagement() {
           </>
         )}
 
-        {/* Calendar Tab Content - Same as before */}
         {activeTab === 'calendar' && (
           <div className="space-y-4 sm:space-y-6">
             <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-4">
@@ -2330,14 +2297,6 @@ export default function InvoiceManagement() {
                           );
                         })}
                       </div>
-                      
-                      {yearData.invoices.length > 0 && (
-                        <div className="mt-4 pt-4 border-t flex justify-end">
-                          <button onClick={() => exportToExcel(yearData.invoices, `invoices_${yearData.year}`)} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 flex items-center gap-2">
-                            <Download className="w-4 h-4" /> Export {yearData.year} Data
-                          </button>
-                        </div>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -2401,7 +2360,6 @@ export default function InvoiceManagement() {
           </div>
         )}
 
-        {/* Archive Tab Content */}
         {activeTab === 'archive' && (
           <div className="space-y-4 sm:space-y-6">
             <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-4 sm:p-6">
@@ -2473,12 +2431,33 @@ export default function InvoiceManagement() {
                           </div>
                           
                           <div className="hidden md:block overflow-x-auto">
-                            <table className="w-full"><thead className="bg-slate-50"><tr><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Invoice #</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Client</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Date</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Bill Type</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Total</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Status</th><th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Actions</th></tr></thead>
+                            <table className="w-full">
+                              <thead className="bg-slate-50">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Invoice #</th>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Client</th>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Date</th>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Bill Type</th>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Total</th>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Status</th>
+                                  <th className="px-4 py-2 text-left text-xs font-bold text-slate-700">Actions</th>
+                                </tr>
+                              </thead>
                               <tbody className="divide-y divide-slate-200">
                                 {filterArchivedInvoices().map((inv, idx) => {
                                   const client = clients.find(c => c.id === inv.clientId);
                                   const rowBg = inv.billType === 'debit' ? 'bg-red-50' : inv.billType === 'credit' ? 'bg-green-50' : '';
-                                  return (<tr key={idx} className={`hover:opacity-80 transition-opacity ${rowBg}`}><td className="px-4 py-3 text-xs font-bold text-slate-800">{inv.invoiceNumber}</td><td className="px-4 py-3 text-xs text-slate-600">{client?.name || 'N/A'}</td><td className="px-4 py-3 text-xs text-slate-600">{inv.date}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${getBillTypeColor(inv.billType || 'none')}`}>{getBillTypeIcon(inv.billType || 'none')}{(inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1)}</span></td><td className={`px-4 py-3 text-xs font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</td><td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></td><td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200" title="Restore to main invoices"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200" title="Delete from archive"><Trash2 className="w-4 h-4" /></button></div></td></tr>);
+                                  return (
+                                    <tr key={idx} className={`hover:opacity-80 transition-opacity ${rowBg}`}>
+                                      <td className="px-4 py-3 text-xs font-bold text-slate-800">{inv.invoiceNumber}</td>
+                                      <td className="px-4 py-3 text-xs text-slate-600">{client?.name || 'N/A'}</td>
+                                      <td className="px-4 py-3 text-xs text-slate-600">{inv.date}</td>
+                                      <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold border ${getBillTypeColor(inv.billType || 'none')}`}>{getBillTypeIcon(inv.billType || 'none')}{(inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1)}</span></td>
+                                      <td className={`px-4 py-3 text-xs font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</td>
+                                      <td className="px-4 py-3"><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></td>
+                                      <td className="px-4 py-3"><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-1.5 bg-emerald-100 text-emerald-700 rounded-lg hover:bg-emerald-200" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-1.5 bg-blue-100 text-blue-700 rounded-lg hover:bg-blue-200" title="Restore to main invoices"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-1.5 bg-rose-100 text-rose-700 rounded-lg hover:bg-rose-200" title="Delete from archive"><Trash2 className="w-4 h-4" /></button></div></td>
+                                    </tr>
+                                  );
                                 })}
                               </tbody>
                             </table>
@@ -2488,7 +2467,26 @@ export default function InvoiceManagement() {
                             {filterArchivedInvoices().map((inv, idx) => {
                               const client = clients.find(c => c.id === inv.clientId);
                               const cardBorder = inv.billType === 'debit' ? 'border-red-200 bg-red-50' : inv.billType === 'credit' ? 'border-green-200 bg-green-50' : 'border-slate-200';
-                              return (<div key={idx} className={`rounded-lg p-3 border ${cardBorder}`}><div className="flex justify-between items-start mb-2"><div><div className="text-xs text-slate-500">Invoice #</div><div className="text-sm font-bold text-slate-800">{inv.invoiceNumber}</div></div><span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span></div><div className="grid grid-cols-2 gap-2 mb-2"><div><div className="text-xs text-slate-500">Client</div><div className="text-sm font-semibold text-slate-700">{client?.name || 'N/A'}</div></div><div><div className="text-xs text-slate-500">Date</div><div className="text-sm text-slate-600">{inv.date}</div></div></div><div className="flex justify-between items-center pt-2 border-t border-slate-200"><div><div className="text-xs text-slate-500">Total</div><div className={`text-base font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</div></div><div className="flex gap-1"><button onClick={() => downloadPDF(inv)} className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700" title="Download PDF"><Download className="w-4 h-4" /></button><button onClick={() => restoreFromArchive(inv)} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Restore"><History className="w-4 h-4" /></button><button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700" title="Delete"><Trash2 className="w-4 h-4" /></button></div></div></div>);
+                              return (
+                                <div key={idx} className={`rounded-lg p-3 border ${cardBorder}`}>
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div><div className="text-xs text-slate-500">Invoice #</div><div className="text-sm font-bold text-slate-800">{inv.invoiceNumber}</div></div>
+                                    <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold ${getStatusColor(inv.status)}`}>{getStatusIcon(inv.status)}{inv.status}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 mb-2">
+                                    <div><div className="text-xs text-slate-500">Client</div><div className="text-sm font-semibold text-slate-700">{client?.name || 'N/A'}</div></div>
+                                    <div><div className="text-xs text-slate-500">Date</div><div className="text-sm text-slate-600">{inv.date}</div></div>
+                                  </div>
+                                  <div className="flex justify-between items-center pt-2 border-t border-slate-200">
+                                    <div><div className="text-xs text-slate-500">Total</div><div className={`text-base font-bold ${inv.billType === 'debit' ? 'text-red-600' : inv.billType === 'credit' ? 'text-green-600' : 'text-blue-600'}`}>₹{formatAmount(inv.total || 0)}</div></div>
+                                    <div className="flex gap-1">
+                                      <button onClick={() => downloadPDF(inv)} className="p-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700" title="Download PDF"><Download className="w-4 h-4" /></button>
+                                      <button onClick={() => restoreFromArchive(inv)} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700" title="Restore"><History className="w-4 h-4" /></button>
+                                      <button onClick={() => deleteArchivedInvoice(archive.id, archive.invoices.findIndex(i => i.invoiceNumber === inv.invoiceNumber))} className="p-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700" title="Delete"><Trash2 className="w-4 h-4" /></button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
                             })}
                           </div>
                           
