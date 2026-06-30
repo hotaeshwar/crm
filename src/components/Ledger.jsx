@@ -211,7 +211,7 @@ export default function Ledger() {
       const boxes = [
         { label: isDebit ? 'Total Billed' : 'Total Quoted', value: `Rs. ${formatAmount(pdfQuoted)}`, fill: [79, 70, 229], text: [255, 255, 255] },
         { label: isDebit ? 'Total Paid' : 'Total Received', value: `Rs. ${formatAmount(pdfReceived)}`, fill: [16, 185, 129], text: [255, 255, 255] },
-        { label: isDebit ? 'Remaining Balance to Paid' : 'To Be Collected', value: `Rs. ${formatAmount(pdfOutstanding)}`, fill: [244, 63, 94], text: [255, 255, 255] },
+        { label: isDebit ? 'Remaining Balance to Pay' : 'To Be Collected', value: `Rs. ${formatAmount(pdfOutstanding)}`, fill: [244, 63, 94], text: [255, 255, 255] },
       ];
       const bw = (cw - 8) / 3;
       boxes.forEach((box, i) => {
@@ -255,7 +255,7 @@ export default function Ledger() {
           'Type', 
           isDebit ? 'Total Billed' : 'Quoted', 
           isDebit ? 'Total Paid' : 'Received', 
-          isDebit ? 'Remaining Balance to Paid' : 'Remaining'
+          isDebit ? 'Remaining Balance to Pay' : 'Remaining'
         ]],
         body: tableData,
         theme: 'striped',
@@ -439,7 +439,7 @@ export default function Ledger() {
                   barW: `${Math.min(100, parseFloat(displayCollectionRate))}%` 
                 },
                 { 
-                  label: isDebit ? 'Remaining Balance to Paid' : 'Outstanding', 
+                  label: isDebit ? 'Remaining Balance to Pay' : 'Outstanding', 
                   value: `₹${formatAmount(displayOutstanding)}`, 
                   color: 'rose', 
                   icon: <AlertCircle className="w-4 h-4 text-rose-600" />, 
@@ -484,7 +484,7 @@ export default function Ledger() {
                 <div className="grid grid-cols-3 gap-2">
                   <div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Total Billed</p><p className="text-lg sm:text-xl font-black text-red-600">₹{formatAmount(debitQuoted)}</p></div>
                   <div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Total Paid</p><p className="text-lg sm:text-xl font-bold text-emerald-600">₹{formatAmount(debitReceived)}</p></div>
-                  <div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Remaining Bal.</p><p className="text-lg sm:text-xl font-bold text-rose-600">₹{formatAmount(Math.max(0, debitQuoted - debitReceived))}</p></div>
+                  <div><p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Balance to Pay</p><p className="text-lg sm:text-xl font-bold text-rose-600">₹{formatAmount(Math.max(0, debitQuoted - debitReceived))}</p></div>
                 </div>
               </div>
 
@@ -605,7 +605,7 @@ export default function Ledger() {
                             'Type', 
                             isDebit ? 'Total Billed' : 'Quoted', 
                             isDebit ? 'Total Paid' : 'Received', 
-                            isDebit ? 'Remaining Balance to Paid' : 'Outstanding', 
+                            isDebit ? 'Remaining Balance to Pay' : 'Outstanding', 
                             'Status'
                           ].map(h => (
                             <th key={h} className="px-4 py-3 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{h}</th>
