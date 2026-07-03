@@ -458,12 +458,15 @@ function App() {
                       href={link.url}
                       target="_blank"
                       rel="noreferrer"
-                      className="group w-full px-4 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center gap-3 font-bold text-sm sm:text-base transition-all bg-white text-slate-700 border-2 border-slate-200 shadow-md hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-300 hover:shadow-lg"
+                      className="w-full px-4 py-3 sm:py-4 rounded-xl sm:rounded-2xl flex items-center justify-between font-bold text-sm sm:text-base transition-all bg-white text-slate-700 hover:bg-slate-50 border-2 border-slate-200 shadow-md"
                     >
-                      <div className="p-2 sm:p-2.5 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 group-hover:bg-indigo-200 transition-colors">
-                        <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 group-hover:text-indigo-700" />
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="p-2 sm:p-2.5 rounded-lg bg-slate-100 text-indigo-600 flex-shrink-0">
+                          <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
+                        </div>
+                        <span>{link.name}</span>
                       </div>
-                      <span>{link.name}</span>
+                      <ExternalLink className="w-4 h-4 text-slate-400 flex-shrink-0" />
                     </a>
                   );
                 })}
@@ -519,12 +522,13 @@ function App() {
                   target="_blank"
                   rel="noreferrer"
                   title={link.name}
-                  className={`group w-full flex items-center ${sidebarOpen ? 'justify-start' : 'justify-center'} gap-3 rounded-2xl px-3 py-3 transition-all bg-white text-slate-700 border-2 border-slate-200 shadow-md hover:bg-slate-50 hover:text-indigo-600 hover:border-indigo-300 hover:shadow-lg`}
+                  className={`w-full flex items-center ${sidebarOpen ? 'justify-start' : 'justify-center'} gap-3 rounded-2xl px-3 py-3 font-semibold text-sm transition-all text-slate-700 hover:bg-slate-50`}
                 >
-                  <div className="p-2 sm:p-2.5 rounded-lg bg-gradient-to-br from-indigo-100 to-purple-100 group-hover:bg-indigo-200 transition-colors">
-                    <Icon className="w-5 h-5 sm:w-6 sm:h-6 text-indigo-600 group-hover:text-indigo-700" />
+                  <div className="p-2 rounded-lg transition-colors flex-shrink-0 text-indigo-600">
+                    <Icon className="w-5 h-5" />
                   </div>
                   <span className={`overflow-hidden whitespace-nowrap transition-all duration-200 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>{link.name}</span>
+                  {sidebarOpen && <ExternalLink className="w-3.5 h-3.5 text-slate-400 ml-auto mr-1 flex-shrink-0" />}
                 </a>
               );
             })}

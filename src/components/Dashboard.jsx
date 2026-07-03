@@ -118,7 +118,6 @@ export default function Dashboard() {
 
   const audioContextRef = useRef(null);
   const hasPlayedSound = useRef(false);
-
   // Sync dismissed reminders to localStorage
   useEffect(() => {
     localStorage.setItem('dismissedReminders', JSON.stringify(dismissedReminders));
@@ -130,7 +129,11 @@ export default function Dashboard() {
     return () => clearInterval(timer);
   }, []);
 
-  const [weatherData, setWeatherData] = useState(null);
+  const [weatherData, setWeatherData] = useState({
+    temperature: 28,
+    weathercode: 1,
+    city: 'Mumbai'
+  });
 
   // Fetch weather and location information
   useEffect(() => {
@@ -140,34 +143,61 @@ export default function Dashboard() {
         let city = 'Mumbai';
         let lat = 19.076;
         let lon = 72.8777;
+        let located = false;
 
+        // Try freeipapi.com first
         try {
-          // Attempt ipapi.co first
-          const ipRes = await fetch('https://ipapi.co/json/');
-          if (ipRes.ok) {
-            const ipData = await ipRes.json();
-            if (ipData.city) {
-              city = ipData.city;
-              lat = ipData.latitude || lat;
-              lon = ipData.longitude || lon;
-            }
-          } else {
-            // Fallback to ipinfo.io
-            const ipinfoRes = await fetch('https://ipinfo.io/json');
-            if (ipinfoRes.ok) {
-              const ipinfoData = await ipinfoRes.json();
-              if (ipinfoData.city) {
-                city = ipinfoData.city;
-                if (ipinfoData.loc) {
-                  const parts = ipinfoData.loc.split(',');
-                  lat = parseFloat(parts[0]) || lat;
-                  lon = parseFloat(parts[1]) || lon;
-                }
-              }
+          const res = await fetch('https://freeipapi.com/api/json');
+          if (res.ok) {
+            const data = await res.json();
+            if (data.cityName) {
+              city = data.cityName;
+              lat = data.latitude || lat;
+              lon = data.longitude || lon;
+              located = true;
             }
           }
         } catch (e) {
-          console.warn('IP lookup failed, using default coords', e);
+          console.warn('freeipapi lookup failed', e);
+        }
+
+        // Try ipapi.co second
+        if (!located) {
+          try {
+            const res = await fetch('https://ipapi.co/json/');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.city) {
+                city = data.city;
+                lat = data.latitude || lat;
+                lon = data.longitude || lon;
+                located = true;
+              }
+            }
+          } catch (e) {
+            console.warn('ipapi lookup failed', e);
+          }
+        }
+
+        // Try ipinfo.io third
+        if (!located) {
+          try {
+            const res = await fetch('https://ipinfo.io/json');
+            if (res.ok) {
+              const data = await res.json();
+              if (data.city) {
+                city = data.city;
+                if (data.loc) {
+                  const parts = data.loc.split(',');
+                  lat = parseFloat(parts[0]) || lat;
+                  lon = parseFloat(parts[1]) || lon;
+                  located = true;
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('ipinfo lookup failed', e);
+          }
         }
 
         // Fetch current weather from Open-Meteo
@@ -184,43 +214,6 @@ export default function Dashboard() {
         }
       } catch (error) {
         console.error('Error fetching weather:', error);
-        if (active && navigator.geolocation) {
-          // Attempt browser geolocation if IP lookup and fetch failed completely
-          navigator.geolocation.getCurrentPosition(
-            async (position) => {
-              try {
-                const lat = position.coords.latitude;
-                const lon = position.coords.longitude;
-                const weatherRes = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true`);
-                const wJson = await weatherRes.json();
-                if (active && wJson.current_weather) {
-                  setWeatherData({
-                    temperature: Math.round(wJson.current_weather.temperature),
-                    weathercode: wJson.current_weather.weathercode,
-                    city: 'My Location'
-                  });
-                }
-              } catch (e) {
-                console.error(e);
-              }
-            },
-            (err) => {
-              if (active) {
-                setWeatherData({
-                  temperature: 28,
-                  weathercode: 1,
-                  city: 'India'
-                });
-              }
-            }
-          );
-        } else if (active) {
-          setWeatherData({
-            temperature: 28,
-            weathercode: 1,
-            city: 'India'
-          });
-        }
       }
     };
 
@@ -247,7 +240,6 @@ export default function Dashboard() {
       document.removeEventListener('touchstart', initAudio);
     };
   }, []);
-
   const playNotificationSound = (typeOverride = null) => {
     const currentType = typeOverride || beepType;
     if (!soundEnabled || (hasPlayedSound.current && !typeOverride)) return;
