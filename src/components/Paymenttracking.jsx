@@ -27,6 +27,8 @@ export default function PaymentTracking() {
   const [payments, setPayments] = useState([]);
   const [invoices, setInvoices] = useState([]);
   const [clients, setClients] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [trackingMode, setTrackingMode] = useState('invoices'); // 'invoices' or 'campaigns'
   const [form, setForm] = useState({
     invoiceId: '', 
     paymentDate: new Date().toISOString().split('T')[0],
@@ -61,6 +63,19 @@ export default function PaymentTracking() {
       },
       (err) => setError(err.message)
     );
+    const unsubProjects = onSnapshot(
+      collection(db, 'projects'), 
+      (snapshot) => {
+        const projectsData = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+        projectsData.sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
+          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
+          return dateB - dateA;
+        });
+        setProjects(projectsData);
+      },
+      (err) => setError(err.message)
+    );
     const unsubPayments = onSnapshot(
       collection(db, 'payments'), 
       (snapshot) => {
@@ -70,7 +85,7 @@ export default function PaymentTracking() {
       },
       (err) => setError(err.message)
     );
-    return () => { unsubClients(); unsubInvoices(); unsubPayments(); };
+    return () => { unsubClients(); unsubInvoices(); unsubProjects(); unsubPayments(); };
   }, []);
 
   const formatAmount = (amount) => {
@@ -84,10 +99,11 @@ export default function PaymentTracking() {
       .filter(p => p.invoiceId === invoiceId)
       .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-  const getRemainingAmount = (invoice, paymentsSnapshot = payments) => {
-    if (!invoice) return 0;
-    const totalPaid = getTotalPaidForInvoice(invoice.id, paymentsSnapshot);
-    return Math.max(0, (invoice.total || invoice.amount || 0) - totalPaid);
+  const getRemainingAmount = (item, paymentsSnapshot = payments, isProject = (trackingMode === 'campaigns')) => {
+    if (!item) return 0;
+    const totalPaid = getTotalPaidForInvoice(item.id, paymentsSnapshot);
+    const itemTotal = isProject ? (item.grandTotal || item.totalCost || 0) : (item.total || item.amount || 0);
+    return Math.max(0, itemTotal - totalPaid);
   };
 
   const getInvoicePaymentStatus = (invoice, paymentsSnapshot = payments) => {
@@ -97,6 +113,59 @@ export default function PaymentTracking() {
     if (totalPaid === 0) return 'unpaid';
     if (totalPaid >= invoiceTotal) return 'paid';
     return 'partial';
+  };
+
+  const getProjectPaymentStatus = (project, paymentsSnapshot = payments) => {
+    if (!project) return 'unknown';
+    const totalPaid = getTotalPaidForInvoice(project.id, paymentsSnapshot);
+    const projectTotal = project.grandTotal || project.totalCost || 0;
+    if (totalPaid === 0) return 'unpaid';
+    if (totalPaid >= projectTotal && projectTotal > 0) return 'paid';
+    return 'partial';
+  };
+
+  const updateProjectStatus = async (projectId, paymentsSnapshot = payments) => {
+    if (isUpdatingRef.current) return;
+    
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+
+    const projectPayments = paymentsSnapshot.filter(p => p.invoiceId === projectId);
+    const totalPaid = projectPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+    const projectTotal = project.grandTotal || project.totalCost || 0;
+
+    let newStatus = 'unpaid';
+    let newAmountReceived = totalPaid;
+    let newRemainingAmount = projectTotal - totalPaid;
+
+    if (totalPaid > 0 && totalPaid < projectTotal) {
+      newStatus = 'partial';
+    } else if (totalPaid >= projectTotal && projectTotal > 0) {
+      newStatus = 'paid';
+      newAmountReceived = projectTotal;
+      newRemainingAmount = 0;
+    }
+
+    const unchanged =
+      project.paymentStatus === newStatus &&
+      project.amountReceived === newAmountReceived &&
+      project.remainingAmount === newRemainingAmount;
+    
+    if (unchanged) return;
+
+    isUpdatingRef.current = true;
+    try {
+      await updateDoc(doc(db, 'projects', projectId), {
+        paymentStatus: newStatus,
+        amountReceived: newAmountReceived,
+        remainingAmount: newRemainingAmount,
+        updatedAt: new Date()
+      });
+    } catch (err) {
+      console.error('Error updating project payment status:', err);
+    } finally {
+      isUpdatingRef.current = false;
+    }
   };
 
   const updateInvoiceStatus = async (invoiceId, paymentsSnapshot = payments) => {
@@ -146,7 +215,7 @@ export default function PaymentTracking() {
   };
 
   useEffect(() => {
-    if (invoices.length === 0 || payments.length === 0) return;
+    if (payments.length === 0) return;
 
     const currentSig = JSON.stringify(payments.map(p => ({ id: p.id, invoiceId: p.invoiceId, amount: p.amount })));
     const prevSig = JSON.stringify(prevPaymentsRef.current.map(p => ({ id: p.id, invoiceId: p.invoiceId, amount: p.amount })));
@@ -156,19 +225,27 @@ export default function PaymentTracking() {
     const invoiceIdsWithPayments = [...new Set(payments.map(p => p.invoiceId))];
     (async () => {
       for (const id of invoiceIdsWithPayments) {
-        await updateInvoiceStatus(id, payments);
+        if (invoices.some(i => i.id === id)) {
+          await updateInvoiceStatus(id, payments);
+        } else if (projects.some(p => p.id === id)) {
+          await updateProjectStatus(id, payments);
+        }
       }
     })();
-  }, [payments, invoices]);
+  }, [payments, invoices, projects]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
     
     try {
-      const inv = invoices.find(i => i.id === form.invoiceId);
-      if (!inv) { 
-        setError('Please select a valid invoice'); 
+      const isCamp = trackingMode === 'campaigns';
+      const item = isCamp 
+        ? projects.find(p => p.id === form.invoiceId)
+        : invoices.find(i => i.id === form.invoiceId);
+        
+      if (!item) { 
+        setError(`Please select a valid ${isCamp ? 'ad campaign' : 'invoice'}`); 
         return; 
       }
 
@@ -178,8 +255,8 @@ export default function PaymentTracking() {
         return; 
       }
 
-      const invoiceTotal = inv.total || inv.amount || 0;
-      const paidSoFar = getTotalPaidForInvoice(inv.id);
+      const itemTotal = isCamp ? (item.grandTotal || item.totalCost || 0) : (item.total || item.amount || 0);
+      const paidSoFar = getTotalPaidForInvoice(item.id);
 
       if (editId) {
         const oldPayment = payments.find(p => p.id === editId);
@@ -191,8 +268,8 @@ export default function PaymentTracking() {
         const oldAmount = oldPayment.amount || 0;
         const adjustedTotal = paidSoFar - oldAmount + paymentAmount;
         
-        if (adjustedTotal > invoiceTotal) {
-          setError(`Payment exceeds invoice total. Max allowed: ₹${formatAmount(invoiceTotal - (paidSoFar - oldAmount))}`);
+        if (adjustedTotal > itemTotal) {
+          setError(`Payment exceeds total. Max allowed: ₹${formatAmount(itemTotal - (paidSoFar - oldAmount))}`);
           return;
         }
         
@@ -204,12 +281,16 @@ export default function PaymentTracking() {
           updatedAt: new Date()
         });
         
-        await updateInvoiceStatus(inv.id);
+        if (isCamp) {
+          await updateProjectStatus(item.id);
+        } else {
+          await updateInvoiceStatus(item.id);
+        }
         setEditId(null);
       } else {
         const newTotal = paidSoFar + paymentAmount;
-        if (newTotal > invoiceTotal) {
-          setError(`Payment exceeds invoice total. Max allowed: ₹${formatAmount(invoiceTotal - paidSoFar)}`);
+        if (newTotal > itemTotal) {
+          setError(`Payment exceeds total. Max allowed: ₹${formatAmount(itemTotal - paidSoFar)}`);
           return;
         }
         
@@ -221,7 +302,11 @@ export default function PaymentTracking() {
           createdAt: new Date()
         });
         
-        await updateInvoiceStatus(inv.id);
+        if (isCamp) {
+          await updateProjectStatus(item.id);
+        } else {
+          await updateInvoiceStatus(item.id);
+        }
       }
 
       setForm({ 
@@ -255,7 +340,11 @@ export default function PaymentTracking() {
       const payment = payments.find(p => p.id === id);
       if (payment) {
         await deleteDoc(doc(db, 'payments', id));
-        await updateInvoiceStatus(payment.invoiceId);
+        if (invoices.some(i => i.id === payment.invoiceId)) {
+          await updateInvoiceStatus(payment.invoiceId);
+        } else if (projects.some(p => p.id === payment.invoiceId)) {
+          await updateProjectStatus(payment.invoiceId);
+        }
       }
     } catch (err) { 
       setError(err.message); 
@@ -282,19 +371,22 @@ export default function PaymentTracking() {
     return () => document.removeEventListener('mousedown', handler);
   }, [showInvoiceDropdown]);
 
-  const selectedInvoice = invoices.find(i => i.id === form.invoiceId);
-  const selectedClient = selectedInvoice ? clients.find(c => c.id === selectedInvoice.clientId) : null;
+  const selectedItem = trackingMode === 'campaigns'
+    ? projects.find(p => p.id === form.invoiceId)
+    : invoices.find(i => i.id === form.invoiceId);
+  const selectedInvoice = selectedItem; // Keep original variable name for JSX compatibility
+  const selectedClient = selectedItem ? clients.find(c => c.id === selectedItem.clientId) : null;
 
-  const totalPaidForSelected = selectedInvoice
-    ? getTotalPaidForInvoice(selectedInvoice.id)
+  const totalPaidForSelected = selectedItem
+    ? getTotalPaidForInvoice(selectedItem.id)
     : 0;
 
-  const remainingForSelected = selectedInvoice
-    ? getRemainingAmount(selectedInvoice)
+  const remainingForSelected = selectedItem
+    ? getRemainingAmount(selectedItem, payments, trackingMode === 'campaigns')
     : 0;
 
-  const paymentStatus = selectedInvoice
-    ? getInvoicePaymentStatus(selectedInvoice)
+  const paymentStatus = selectedItem
+    ? (trackingMode === 'campaigns' ? getProjectPaymentStatus(selectedItem) : getInvoicePaymentStatus(selectedItem))
     : null;
 
   const getMethodIcon = (method) => {
@@ -345,36 +437,77 @@ export default function PaymentTracking() {
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
   const creditTotal = payments
-    .filter(p => invoices.find(i => i.id === p.invoiceId)?.billType === 'credit')
+    .filter(p => {
+      const invoice = invoices.find(i => i.id === p.invoiceId);
+      if (invoice && invoice.billType === 'credit') return true;
+      const project = projects.find(pr => pr.id === p.invoiceId);
+      if (project) return true; // Ad campaigns are credit by default
+      return false;
+    })
     .reduce((sum, p) => sum + (p.amount || 0), 0);
 
-  const paidInvoices = invoices.filter(i => i.status === 'paid').length;
-  const partialInvoices = invoices.filter(i => i.status === 'partial').length;
-  const unpaidInvoices = invoices.filter(i => i.status === 'unpaid').length;
+  const paidInvoices = trackingMode === 'campaigns'
+    ? projects.filter(p => getProjectPaymentStatus(p) === 'paid').length
+    : invoices.filter(i => i.status === 'paid').length;
+
+  const partialInvoices = trackingMode === 'campaigns'
+    ? projects.filter(p => getProjectPaymentStatus(p) === 'partial').length
+    : invoices.filter(i => i.status === 'partial').length;
+
+  const unpaidInvoices = trackingMode === 'campaigns'
+    ? projects.filter(p => getProjectPaymentStatus(p) === 'unpaid').length
+    : invoices.filter(i => i.status === 'unpaid').length;
 
   const filteredPayments = payments.filter(payment => {
     const invoice = invoices.find(i => i.id === payment.invoiceId);
-    if (billTypeFilter !== 'all' && invoice?.billType !== billTypeFilter) return false;
-    if (statusFilter !== 'all' && invoice?.status !== statusFilter) return false;
+    const project = projects.find(p => p.id === payment.invoiceId);
+    
+    if (trackingMode === 'invoices' && !invoice) return false;
+    if (trackingMode === 'campaigns' && !project) return false;
+
+    const item = invoice || project;
+    const isProj = !!project;
+    const billType = isProj ? 'credit' : item.billType;
+    const status = isProj ? getProjectPaymentStatus(project) : item.status;
+
+    if (billTypeFilter !== 'all' && billType !== billTypeFilter) return false;
+    if (statusFilter !== 'all' && status !== statusFilter) return false;
     return true;
   });
 
-  const filteredInvoicesForDropdown = invoices
-    .filter(invoice => {
-      const status = invoice.status || 'unpaid';
-      if (status === 'paid') return false;
-      if (billTypeFilter !== 'all' && invoice.billType !== billTypeFilter) return false;
-      if (statusFilter !== 'all') {
-        if (statusFilter === 'paid') return false;
-        if (statusFilter !== status) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => {
-      const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
-      const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
-      return dateB - dateA;
-    });
+  const filteredInvoicesForDropdown = trackingMode === 'campaigns'
+    ? projects
+        .filter(project => {
+          const status = getProjectPaymentStatus(project);
+          if (status === 'paid') return false;
+          if (billTypeFilter !== 'all' && billTypeFilter !== 'credit') return false;
+          if (statusFilter !== 'all') {
+            if (statusFilter === 'paid') return false;
+            if (statusFilter !== status) return false;
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
+          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
+          return dateB - dateA;
+        })
+    : invoices
+        .filter(invoice => {
+          const status = invoice.status || 'unpaid';
+          if (status === 'paid') return false;
+          if (billTypeFilter !== 'all' && invoice.billType !== billTypeFilter) return false;
+          if (statusFilter !== 'all') {
+            if (statusFilter === 'paid') return false;
+            if (statusFilter !== status) return false;
+          }
+          return true;
+        })
+        .sort((a, b) => {
+          const dateA = a.createdAt?.toDate?.() || new Date(a.createdAt) || new Date(0);
+          const dateB = b.createdAt?.toDate?.() || new Date(b.createdAt) || new Date(0);
+          return dateB - dateA;
+        });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-indigo-50 to-purple-50">
@@ -388,9 +521,35 @@ export default function PaymentTracking() {
             </div>
             <div className="min-w-0">
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 truncate">Payment Tracking</h2>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">Track payments by invoice status</p>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5 sm:mt-1">
+                {trackingMode === 'campaigns' ? 'Track payments by ad campaign status' : 'Track payments by invoice status'}
+              </p>
             </div>
           </div>
+        </div>
+
+        {/* Tracking Mode Selector */}
+        <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-100 w-fit mb-4 sm:mb-6">
+          <button
+            onClick={() => { setTrackingMode('invoices'); setBillTypeFilter('all'); setStatusFilter('all'); }}
+            className={`px-5 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
+              trackingMode === 'invoices'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            Invoices Payments
+          </button>
+          <button
+            onClick={() => { setTrackingMode('campaigns'); setBillTypeFilter('all'); setStatusFilter('all'); }}
+            className={`px-5 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
+              trackingMode === 'campaigns'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
+                : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+            }`}
+          >
+            Ad Campaigns Payments
+          </button>
         </div>
 
         {/* Status Summary Cards */}
@@ -401,7 +560,9 @@ export default function PaymentTracking() {
               <span className="text-xs sm:text-sm font-medium text-emerald-800">Paid</span>
             </div>
             <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-emerald-700">{paidInvoices}</div>
-            <div className="text-[10px] sm:text-xs text-emerald-600 mt-0.5 sm:mt-1">invoices fully paid</div>
+            <div className="text-[10px] sm:text-xs text-emerald-600 mt-0.5 sm:mt-1">
+              {trackingMode === 'campaigns' ? 'campaigns fully paid' : 'invoices fully paid'}
+            </div>
           </div>
           <div className="bg-amber-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-amber-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
@@ -409,7 +570,9 @@ export default function PaymentTracking() {
               <span className="text-xs sm:text-sm font-medium text-amber-800">Partial</span>
             </div>
             <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-amber-700">{partialInvoices}</div>
-            <div className="text-[10px] sm:text-xs text-amber-600 mt-0.5 sm:mt-1">invoices partially paid</div>
+            <div className="text-[10px] sm:text-xs text-amber-600 mt-0.5 sm:mt-1">
+              {trackingMode === 'campaigns' ? 'campaigns partially paid' : 'invoices partially paid'}
+            </div>
           </div>
           <div className="bg-rose-50 rounded-xl sm:rounded-2xl p-3 sm:p-4 border border-rose-200">
             <div className="flex items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
@@ -417,7 +580,9 @@ export default function PaymentTracking() {
               <span className="text-xs sm:text-sm font-medium text-rose-800">Unpaid</span>
             </div>
             <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-rose-700">{unpaidInvoices}</div>
-            <div className="text-[10px] sm:text-xs text-rose-600 mt-0.5 sm:mt-1">invoices unpaid</div>
+            <div className="text-[10px] sm:text-xs text-rose-600 mt-0.5 sm:mt-1">
+              {trackingMode === 'campaigns' ? 'campaigns unpaid' : 'invoices unpaid'}
+            </div>
           </div>
         </div>
 
@@ -494,7 +659,7 @@ export default function PaymentTracking() {
             {/* Invoice Dropdown */}
             <div className="relative invoice-dropdown-container sm:col-span-2 md:col-span-1">
               <label className="block text-xs sm:text-sm font-medium text-slate-700 mb-1 sm:mb-2">
-                Select Invoice
+                {trackingMode === 'campaigns' ? 'Select Ad Campaign' : 'Select Invoice'}
                 {(billTypeFilter !== 'all' || statusFilter !== 'all') && (
                   <span className="text-[10px] sm:text-xs text-slate-500 ml-1">(filtered)</span>
                 )}
@@ -512,7 +677,7 @@ export default function PaymentTracking() {
                         <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-500 flex-shrink-0" />
                         <div className="min-w-0 flex-1">
                           <span className="text-xs sm:text-sm font-medium text-slate-900 truncate block">
-                            {selectedInvoice?.invoiceNumber || 'Select Invoice'}
+                            {selectedInvoice?.invoiceNumber || selectedInvoice?.projectNumber || (trackingMode === 'campaigns' ? 'Select Ad Campaign' : 'Select Invoice')}
                           </span>
                           {selectedClient && (
                             <div className="text-[10px] sm:text-xs text-slate-500 truncate">{selectedClient.name}</div>
@@ -527,7 +692,9 @@ export default function PaymentTracking() {
                     ) : (
                       <div className="flex items-center gap-1.5 sm:gap-2">
                         <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-slate-400 flex-shrink-0" />
-                        <span className="text-slate-500 text-xs sm:text-sm">Select Invoice</span>
+                        <span className="text-slate-500 text-xs sm:text-sm">
+                          {trackingMode === 'campaigns' ? 'Select Ad Campaign' : 'Select Invoice'}
+                        </span>
                       </div>
                     )}
                   </div>
@@ -537,14 +704,16 @@ export default function PaymentTracking() {
                 {showInvoiceDropdown && (
                   <div className="absolute z-50 w-full mt-1 bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 sm:max-h-60 overflow-y-auto">
                     <div className="p-2 bg-slate-50 border-b sticky top-0">
-                      <div className="text-[10px] sm:text-xs font-semibold text-slate-700">Available Invoices (Partial &amp; Unpaid Only)</div>
+                      <div className="text-[10px] sm:text-xs font-semibold text-slate-700">
+                        {trackingMode === 'campaigns' ? 'Available Ad Campaigns (Partial & Unpaid Only)' : 'Available Invoices (Partial & Unpaid Only)'}
+                      </div>
                     </div>
                     {filteredInvoicesForDropdown.length > 0 ? (
                       filteredInvoicesForDropdown.map((invoice) => {
                         const client = clients.find(c => c.id === invoice.clientId);
-                        const invTotal = invoice.total || invoice.amount || 0;
+                        const invTotal = invoice.grandTotal || invoice.totalCost || invoice.total || invoice.amount || 0;
                         const fromPmts = getTotalPaidForInvoice(invoice.id);
-                        const invStatus = invoice.status || 'unpaid';
+                        const invStatus = trackingMode === 'campaigns' ? getProjectPaymentStatus(invoice) : (invoice.status || 'unpaid');
                         const remDisplay = fromPmts > 0 ? Math.max(0, invTotal - fromPmts) : Math.max(0, invoice.remainingAmount ?? invTotal);
 
                         const handleSelect = () => {
@@ -567,10 +736,12 @@ export default function PaymentTracking() {
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                  <div className="text-xs sm:text-sm font-medium text-slate-900 truncate">{invoice.invoiceNumber}</div>
-                                  {invoice.billType && (
-                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border flex-shrink-0 ${getBillTypeColor(invoice.billType)}`}>
-                                      {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
+                                  <div className="text-xs sm:text-sm font-medium text-slate-900 truncate">
+                                    {invoice.invoiceNumber || invoice.projectNumber}
+                                  </div>
+                                  {(invoice.billType || trackingMode === 'campaigns') && (
+                                    <span className={`px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border flex-shrink-0 ${getBillTypeColor(invoice.billType || 'credit')}`}>
+                                      {(invoice.billType || 'credit').charAt(0).toUpperCase() + (invoice.billType || 'credit').slice(1)}
                                     </span>
                                   )}
                                   <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border flex-shrink-0 ${getStatusColor(invStatus)}`}>
@@ -597,7 +768,7 @@ export default function PaymentTracking() {
                     ) : (
                       <div className="px-3 py-4 text-xs sm:text-sm text-slate-500 text-center">
                         <AlertCircle className="w-8 h-8 mx-auto mb-2 text-slate-400" />
-                        No partial or unpaid invoices found
+                        {trackingMode === 'campaigns' ? 'No partial or unpaid ad campaigns found' : 'No partial or unpaid invoices found'}
                       </div>
                     )}
                   </div>
@@ -608,9 +779,11 @@ export default function PaymentTracking() {
                 <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-slate-50 rounded-lg border border-slate-200">
                   <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     <div>
-                      <div className="text-[10px] sm:text-xs text-slate-500">Invoice Total</div>
+                      <div className="text-[10px] sm:text-xs text-slate-500">
+                        {trackingMode === 'campaigns' ? 'Campaign Budget' : 'Invoice Total'}
+                      </div>
                       <div className="text-xs sm:text-sm font-bold text-slate-800">
-                        ₹{formatAmount(selectedInvoice.total || selectedInvoice.amount || 0)}
+                        ₹{formatAmount(selectedInvoice.grandTotal || selectedInvoice.totalCost || selectedInvoice.total || selectedInvoice.amount || 0)}
                       </div>
                     </div>
                     <div>
@@ -691,16 +864,20 @@ export default function PaymentTracking() {
             </div>
           </div>
 
-          {form.invoiceId && selectedInvoice && paymentStatus && paymentStatus !== 'paid' && (
+           {form.invoiceId && selectedInvoice && paymentStatus && paymentStatus !== 'paid' && (
             <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-br from-slate-50 to-indigo-50 rounded-lg sm:rounded-xl border border-slate-200">
               <h4 className="text-xs sm:text-sm font-semibold text-slate-700 mb-2 sm:mb-3 flex items-center gap-1.5">
                 <FileText className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-600" />
-                Invoice &amp; Payment Details
+                {trackingMode === 'campaigns' ? 'Campaign & Payment Details' : 'Invoice & Payment Details'}
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
                 <div className="bg-white rounded-lg p-2 sm:p-2.5 border border-slate-200">
-                  <div className="text-[10px] sm:text-xs text-slate-500 mb-0.5">Invoice Number</div>
-                  <div className="text-xs sm:text-sm font-bold text-slate-800 truncate">{selectedInvoice.invoiceNumber}</div>
+                  <div className="text-[10px] sm:text-xs text-slate-500 mb-0.5">
+                    {trackingMode === 'campaigns' ? 'Campaign Number' : 'Invoice Number'}
+                  </div>
+                  <div className="text-xs sm:text-sm font-bold text-slate-800 truncate">
+                    {selectedInvoice.invoiceNumber || selectedInvoice.projectNumber}
+                  </div>
                 </div>
                 <div className="bg-white rounded-lg p-2 sm:p-2.5 border border-slate-200">
                   <div className="text-[10px] sm:text-xs text-slate-500 mb-0.5">Client</div>
@@ -708,7 +885,11 @@ export default function PaymentTracking() {
                 </div>
                 <div className="bg-white rounded-lg p-2 sm:p-2.5 border border-slate-200">
                   <div className="text-[10px] sm:text-xs text-slate-500 mb-0.5">Bill Type</div>
-                  {selectedInvoice.billType ? (
+                  {trackingMode === 'campaigns' ? (
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border bg-purple-50 text-purple-700 border-purple-200">
+                      Credit
+                    </span>
+                  ) : selectedInvoice.billType ? (
                     <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border ${getBillTypeColor(selectedInvoice.billType)}`}>
                       {selectedInvoice.billType.charAt(0).toUpperCase() + selectedInvoice.billType.slice(1)}
                     </span>
@@ -729,10 +910,10 @@ export default function PaymentTracking() {
               </div>
               <p className="text-[10px] sm:text-xs text-slate-500 mt-2 sm:mt-3">
                 {paymentStatus === 'paid'
-                  ? 'This invoice has been fully paid.'
+                  ? `This ${trackingMode === 'campaigns' ? 'campaign' : 'invoice'} has been fully paid.`
                   : paymentStatus === 'partial'
                   ? `₹${formatAmount(totalPaidForSelected)} already received. Amount field pre-filled with remaining balance.`
-                  : 'Amount field pre-filled with full invoice total.'
+                  : `Amount field pre-filled with full ${trackingMode === 'campaigns' ? 'campaign budget' : 'invoice total'}.`
                 }
               </p>
             </div>
@@ -774,7 +955,7 @@ export default function PaymentTracking() {
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  {['Invoice #','Client','Bill Type','Invoice Status','Payment Amount','Progress','Date','Method','Actions'].map(h => (
+                  {[(trackingMode === 'campaigns' ? 'Campaign #' : 'Invoice #'),'Client','Bill Type', (trackingMode === 'campaigns' ? 'Campaign Status' : 'Invoice Status'),'Payment Amount','Progress','Date','Method','Actions'].map(h => (
                     <th key={h} className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">{h}</th>
                   ))}
                 </tr>
@@ -793,10 +974,14 @@ export default function PaymentTracking() {
                 ) : (
                   filteredPayments.map(payment => {
                     const invoice = invoices.find(i => i.id === payment.invoiceId);
-                    const client = invoice ? clients.find(c => c.id === invoice.clientId) : null;
-                    const invoiceTotal = invoice?.total || invoice?.amount || 0;
-                    const totalPaid = invoice ? getTotalPaidForInvoice(invoice.id) : 0;
-                    const invStatus = invoice?.status || 'unknown';
+                    const project = projects.find(p => p.id === payment.invoiceId);
+                    const item = invoice || project;
+                    const isCamp = !!project;
+                    
+                    const client = item ? clients.find(c => c.id === item.clientId) : null;
+                    const invoiceTotal = isCamp ? (item.grandTotal || item.totalCost || 0) : (item.total || item.amount || 0);
+                    const totalPaid = item ? getTotalPaidForInvoice(item.id) : 0;
+                    const invStatus = isCamp ? getProjectPaymentStatus(item) : (item.status || 'unknown');
 
                     return (
                       <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
@@ -805,14 +990,21 @@ export default function PaymentTracking() {
                             <div className="bg-indigo-100 p-1.5 lg:p-2 rounded-full flex-shrink-0">
                               <FileText className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-indigo-600" />
                             </div>
-                            <span className="font-medium text-slate-800 text-xs sm:text-sm truncate">{invoice?.invoiceNumber || 'N/A'}</span>
+                            <span className="font-medium text-slate-800 text-xs sm:text-sm truncate">
+                              {item?.invoiceNumber || item?.projectNumber || 'N/A'}
+                            </span>
                           </div>
                         </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
                           <span className="text-xs sm:text-sm text-slate-700 truncate block max-w-[150px]">{client?.name || 'N/A'}</span>
                         </td>
                         <td className="px-3 py-3 lg:px-4 lg:py-4 xl:px-6">
-                          {invoice?.billType ? (
+                          {isCamp ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200">
+                              <CreditCard className="w-3 h-3" />
+                              Credit
+                            </span>
+                          ) : invoice?.billType ? (
                             <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-semibold border ${getBillTypeColor(invoice.billType)}`}>
                               <CreditCard className="w-3 h-3" />
                               {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
@@ -833,7 +1025,7 @@ export default function PaymentTracking() {
                           {invStatus === 'partial' ? (
                             <div>
                               <div className="text-xs font-medium text-amber-600">
-                                {Math.round((totalPaid / invoiceTotal) * 100)}% paid
+                                {invoiceTotal > 0 ? Math.round((totalPaid / invoiceTotal) * 100) : 0}% paid
                               </div>
                               <div className="text-[10px] text-slate-500">
                                 ₹{formatAmount(totalPaid)} / ₹{formatAmount(invoiceTotal)}
@@ -886,10 +1078,14 @@ export default function PaymentTracking() {
             ) : (
               filteredPayments.map(payment => {
                 const invoice = invoices.find(i => i.id === payment.invoiceId);
-                const client = invoice ? clients.find(c => c.id === invoice.clientId) : null;
-                const invoiceTotal = invoice?.total || invoice?.amount || 0;
-                const totalPaid = invoice ? getTotalPaidForInvoice(invoice.id) : 0;
-                const invStatus = invoice?.status || 'unknown';
+                const project = projects.find(p => p.id === payment.invoiceId);
+                const item = invoice || project;
+                const isCamp = !!project;
+                
+                const client = item ? clients.find(c => c.id === item.clientId) : null;
+                const invoiceTotal = isCamp ? (item.grandTotal || item.totalCost || 0) : (item.total || item.amount || 0);
+                const totalPaid = item ? getTotalPaidForInvoice(item.id) : 0;
+                const invStatus = isCamp ? getProjectPaymentStatus(item) : (item.status || 'unknown');
 
                 return (
                   <div key={payment.id} className="p-3 sm:p-4 hover:bg-slate-50 transition-colors">
@@ -899,7 +1095,9 @@ export default function PaymentTracking() {
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="font-semibold text-slate-800 text-sm sm:text-base truncate">{invoice?.invoiceNumber || 'N/A'}</h4>
+                          <h4 className="font-semibold text-slate-800 text-sm sm:text-base truncate">
+                            {item?.invoiceNumber || item?.projectNumber || 'N/A'}
+                          </h4>
                           <span className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] sm:text-[10px] font-semibold border ${getStatusColor(invStatus)}`}>
                             {getStatusIcon(invStatus)}{invStatus}
                           </span>
@@ -910,10 +1108,10 @@ export default function PaymentTracking() {
                           <div className="mt-2 space-y-1">
                             <div className="w-full bg-slate-200 rounded-full h-1.5">
                               <div className="bg-amber-500 h-1.5 rounded-full"
-                                style={{ width: `${Math.min(100, (totalPaid / invoiceTotal) * 100)}%` }} />
+                                style={{ width: invoiceTotal > 0 ? `${Math.min(100, (totalPaid / invoiceTotal) * 100)}%` : '0%' }} />
                             </div>
                             <p className="text-[10px] sm:text-xs text-amber-600">
-                              Progress: ₹{formatAmount(totalPaid)} / ₹{formatAmount(invoiceTotal)} ({Math.round((totalPaid / invoiceTotal) * 100)}%)
+                              Progress: ₹{formatAmount(totalPaid)} / ₹{formatAmount(invoiceTotal)} ({invoiceTotal > 0 ? Math.round((totalPaid / invoiceTotal) * 100) : 0}%)
                             </p>
                           </div>
                         )}
@@ -931,12 +1129,17 @@ export default function PaymentTracking() {
                         <span className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg text-[10px] sm:text-xs font-medium border ${getMethodBadgeColor(payment.method)}`}>
                           {getMethodIcon(payment.method)}<span className="capitalize">{payment.method}</span>
                         </span>
-                        {invoice?.billType && (
+                        {isCamp ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-xs font-semibold border bg-purple-50 text-purple-700 border-purple-200">
+                            <CreditCard className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                            Credit
+                          </span>
+                        ) : invoice?.billType ? (
                           <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] sm:text-xs font-semibold border ${getBillTypeColor(invoice.billType)}`}>
                             <CreditCard className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                             {invoice.billType.charAt(0).toUpperCase() + invoice.billType.slice(1)}
                           </span>
-                        )}
+                        ) : null}
                       </div>
                     </div>
                     <div className="flex gap-1.5 sm:gap-2">
