@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Users, FileText, Wallet, Menu, X, BookOpen, Megaphone, LogOut, UserCircle, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Users, FileText, Wallet, Menu, X, BookOpen, Megaphone, LogOut, UserCircle, ExternalLink, TrendingUp, Calendar } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
 
@@ -10,6 +10,8 @@ import PaymentTracking    from './components/Paymenttracking';
 import Ledger             from './components/Ledger';
 import ClientAdManagement from './components/ProjectManagement';
 import LoginForm          from './components/Loginform';
+import LeadPipeline       from './components/LeadPipeline';
+import UnifiedCalendar    from './components/UnifiedCalendar';
 
 /* ═══════════════════════════════════════════
    FLASH SCREEN STYLES
@@ -296,12 +298,14 @@ function App() {
   }, []);
 
   const tabs = [
-    { id: 'dashboard', name: 'Dashboard',    component: Dashboard,          icon: LayoutDashboard },
-    { id: 'clients',   name: 'Clients',      component: ClientManagement,   icon: Users           },
-    { id: 'campaigns', name: 'Ad Campaigns', component: ClientAdManagement, icon: Megaphone       },
-    { id: 'invoices',  name: 'Invoices',     component: InvoiceManagement,  icon: FileText        },
-    { id: 'payments',  name: 'Payments',     component: PaymentTracking,    icon: Wallet          },
-    { id: 'ledger',    name: 'Ledger',       component: Ledger,             icon: BookOpen        },
+    { id: 'dashboard', name: 'Dashboard',      component: Dashboard,          icon: LayoutDashboard },
+    { id: 'leads',     name: 'Leads Pipeline', component: LeadPipeline,       icon: TrendingUp      },
+    { id: 'clients',   name: 'Clients',        component: ClientManagement,   icon: Users           },
+    { id: 'calendar',  name: 'Calendar',       component: UnifiedCalendar,    icon: Calendar        },
+    { id: 'campaigns', name: 'Ad Campaigns',   component: ClientAdManagement, icon: Megaphone       },
+    { id: 'invoices',  name: 'Invoices',       component: InvoiceManagement,  icon: FileText        },
+    { id: 'payments',  name: 'Payments',       component: PaymentTracking,    icon: Wallet          },
+    { id: 'ledger',    name: 'Ledger',         component: Ledger,             icon: BookOpen        },
   ];
 
   const externalLinks = [
@@ -500,16 +504,18 @@ function App() {
                   key={tab.id}
                   onClick={() => handleTabClick(tab.id)}
                   title={tab.name}
-                  className={`w-full flex items-center ${sidebarOpen ? 'justify-start' : 'justify-center'} gap-3 rounded-2xl px-3 py-3 font-semibold text-sm transition-all ${
+                  className={`w-full flex items-center ${sidebarOpen ? 'justify-start gap-3' : 'justify-center gap-0'} rounded-2xl px-3 py-3 font-semibold text-sm transition-all cursor-pointer ${
                     activeTab === tab.id
                       ? 'bg-gradient-to-r from-indigo-500 via-purple-600 to-pink-500 text-white shadow-lg'
                       : 'text-slate-700 hover:bg-slate-50'
                   }`}
                 >
-                  <div className="p-2 rounded-lg transition-colors">
-                    <Icon className="w-5 h-5 flex-shrink-0 text-indigo-600" />
+                  <div className="p-2 rounded-lg transition-colors flex-shrink-0">
+                    <Icon className={`w-5 h-5 flex-shrink-0 ${activeTab === tab.id ? 'text-white' : 'text-indigo-600'}`} />
                   </div>
-                  <span className={`overflow-hidden whitespace-nowrap transition-all duration-200 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>{tab.name}</span>
+                  {sidebarOpen && (
+                    <span className="overflow-hidden whitespace-nowrap transition-all duration-200 opacity-100 translate-x-0">{tab.name}</span>
+                  )}
                 </button>
               );
             })}
@@ -522,12 +528,14 @@ function App() {
                   target="_blank"
                   rel="noreferrer"
                   title={link.name}
-                  className={`w-full flex items-center ${sidebarOpen ? 'justify-start' : 'justify-center'} gap-3 rounded-2xl px-3 py-3 font-semibold text-sm transition-all text-slate-700 hover:bg-slate-50`}
+                  className={`w-full flex items-center ${sidebarOpen ? 'justify-start gap-3' : 'justify-center gap-0'} rounded-2xl px-3 py-3 font-semibold text-sm transition-all text-slate-700 hover:bg-slate-50`}
                 >
                   <div className="p-2 rounded-lg transition-colors flex-shrink-0 text-indigo-600">
                     <Icon className="w-5 h-5" />
                   </div>
-                  <span className={`overflow-hidden whitespace-nowrap transition-all duration-200 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>{link.name}</span>
+                  {sidebarOpen && (
+                    <span className="overflow-hidden whitespace-nowrap transition-all duration-200 opacity-100 translate-x-0">{link.name}</span>
+                  )}
                   {sidebarOpen && <ExternalLink className="w-3.5 h-3.5 text-slate-400 ml-auto mr-1 flex-shrink-0" />}
                 </a>
               );
@@ -535,19 +543,23 @@ function App() {
           </div>
 
           <div className="px-2 pb-4">
-            <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-200 transition-all">
+            <div className={`flex items-center ${sidebarOpen ? 'justify-start gap-3' : 'justify-center gap-0'} p-3 rounded-2xl bg-slate-50 border border-slate-200 transition-all`}>
               <UserCircle className="w-5 h-5 text-indigo-600 flex-shrink-0" />
-              <div className={`min-w-0 overflow-hidden transition-all duration-200 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>
-                <p className="text-sm font-semibold text-slate-900 truncate">{user.email}</p>
-                <p className="text-xs text-slate-500">Signed in</p>
-              </div>
+              {sidebarOpen && (
+                <div className="min-w-0 overflow-hidden transition-all duration-200">
+                  <p className="text-sm font-semibold text-slate-900 truncate">{user.email}</p>
+                  <p className="text-xs text-slate-500">Signed in</p>
+                </div>
+              )}
             </div>
             <button
               onClick={handleLogout}
-              className="mt-3 w-full flex items-center justify-center gap-2 px-3 py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl font-semibold transition-colors"
+              className={`mt-3 w-full flex items-center ${sidebarOpen ? 'justify-start gap-2 px-3' : 'justify-center gap-0 px-0'} py-3 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-2xl font-semibold transition-colors cursor-pointer`}
             >
-              <LogOut className="w-4 h-4" />
-              <span className={`transition-all duration-200 ${sidebarOpen ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-2'}`}>Logout</span>
+              <LogOut className="w-4 h-4 flex-shrink-0" />
+              {sidebarOpen && (
+                <span className="transition-all duration-200">Logout</span>
+              )}
             </button>
           </div>
         </div>

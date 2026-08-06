@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper check for authentication
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Rules for client management
+    match /clients/{clientId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for project and ad campaigns
+    match /projects/{projectId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for leads in the sales pipeline
+    match /leads/{leadId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for calendar events
+    match /calendar_events/{eventId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Rules for general and Google settings
+    match /settings/{settingId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}
