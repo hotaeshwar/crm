@@ -1,10 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { db, auth } from '../firebase';
-import { collection, addDoc, updateDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { onAuthStateChanged } from 'firebase/auth';
 import {
   Search, Plus, X, Calendar, Mail, Phone,
-  TrendingUp, User, Info, Check, AlertCircle, UserCheck
+  TrendingUp, User, Info, Check, AlertCircle, UserCheck, Trash2
 } from 'lucide-react';
 import { useToast } from './Loginform';
 
@@ -199,6 +199,16 @@ export default function LeadPipeline() {
     }
   };
 
+  const handleDeleteLead = async (leadId, representative) => {
+    if (!window.confirm(`Are you sure you want to delete the opportunity for "${representative}"?`)) return;
+    try {
+      await deleteDoc(doc(db, 'leads', leadId));
+      success(`Lead opportunity for "${representative}" deleted.`);
+    } catch (err) {
+      toastError('Failed to delete lead opportunity.');
+    }
+  };
+
   // Filter leads by search query
   const filteredLeads = useMemo(() => {
     if (!searchQuery.trim()) return leads;
@@ -316,13 +326,22 @@ export default function LeadPipeline() {
                           className="bg-white rounded-xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow p-3.5 space-y-3 relative group"
                         >
                           {/* Lead info */}
-                          <div>
-                            <h3 className="font-extrabold text-slate-800 text-sm tracking-wide uppercase truncate">
-                              {lead.representative}
-                            </h3>
-                            <p className="text-[10px] sm:text-xs font-extrabold text-slate-500 uppercase tracking-wide truncate mt-0.5">
-                              {lead.company || 'No Company'}
-                            </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <h3 className="font-extrabold text-slate-800 text-sm tracking-wide uppercase truncate">
+                                {lead.representative}
+                              </h3>
+                              <p className="text-[10px] sm:text-xs font-extrabold text-slate-500 uppercase tracking-wide truncate mt-0.5">
+                                {lead.company || 'No Company'}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleDeleteLead(lead.id, lead.representative)}
+                              className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-100 flex-shrink-0 cursor-pointer"
+                              title="Delete Opportunity"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
 
                           {/* Contact and Source */}
