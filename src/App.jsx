@@ -363,7 +363,7 @@ function App() {
               <img
                 src="/images/LOGO.png"
                 alt="BID Logo"
-                className="h-14 w-14 sm:h-16 sm:w-16 md:h-20 md:w-20 lg:h-24 lg:w-24 xl:h-28 xl:w-28 object-contain"
+                className="h-10 sm:h-12 md:h-14 w-auto object-contain flex-shrink-0"
               />
               <div>
                 <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl xl:text-4xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent leading-none">
@@ -568,13 +568,15 @@ function App() {
       {/* ── Page content ── */}
       <main className="w-full">
         <div className="max-w-[1200px] mx-auto px-6 lg:px-10 py-6 lg:py-8">
-          <div className="flex items-center gap-4">
-            <div className="h-20 w-20 rounded-2xl bg-indigo-50 ring-1 ring-slate-200 flex items-center justify-center shadow-sm">
-              <img src="/images/LOGO.png" alt="BID Logo" className="h-16 w-16 object-contain" />
-            </div>
+          <div className="flex items-center gap-4 sm:gap-6">
+            <img
+              src="/images/LOGO.png"
+              alt="BID Logo"
+              className="h-14 sm:h-16 md:h-20 w-auto object-contain shrink-0"
+            />
             <div>
-              <h1 className="text-2xl md:text-3xl font-black text-slate-900">CRM Accounting</h1>
-              <p className="text-sm text-slate-500">Business Intelligence Dashboard</p>
+              <h1 className="text-2xl md:text-3xl font-black text-slate-900 tracking-tight">CRM Accounting</h1>
+              <p className="text-xs sm:text-sm text-slate-500 font-medium">Business Intelligence Dashboard</p>
             </div>
           </div>
         </div>

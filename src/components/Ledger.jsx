@@ -52,7 +52,7 @@ export default function Ledger() {
   const [projects, setProjects] = useState([]);
   const [payments, setPayments] = useState([]);
   const [selectedClientId, setSelectedClientId] = useState('');
-  const [ledgerMode, setLedgerMode] = useState('invoices'); // 'invoices' or 'campaigns'
+  const [ledgerMode, setLedgerMode] = useState('invoices'); // 'invoices', 'campaigns', or 'combined'
   const [showDropdown, setShowDropdown] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [activeFilter, setActiveFilter] = useState('all');
@@ -94,27 +94,40 @@ export default function Ledger() {
   const clientInvoices = allInvoices.filter(inv => inv.clientId === selectedClientId);
   const clientCampaigns = projects.filter(p => p.clientId === selectedClientId);
 
+  const formattedCampaigns = clientCampaigns.map(p => {
+    const total = p.grandTotal || p.totalCost || 0;
+    const paidAmt = getPaymentsForInvoice(p.id);
+    const remAmt = Math.max(0, total - paidAmt);
+    const pStatus = paidAmt === 0 ? 'unpaid' : (paidAmt >= total ? 'paid' : 'partial');
+    return {
+      id: p.id,
+      invoiceNumber: p.projectNumber || 'N/A',
+      date: p.startDate || '—',
+      service: p.projectName || '—',
+      selectedServices: [],
+      billType: 'credit', // Ad campaigns are always credit
+      total: total,
+      amount: total,
+      amountReceived: paidAmt,
+      remainingAmount: remAmt,
+      status: pStatus,
+      isCampaign: true,
+    };
+  });
+
+  const formattedInvoices = clientInvoices.map(inv => ({
+    ...inv,
+    isCampaign: false,
+  }));
+
   const activeItems = ledgerMode === 'invoices' 
-    ? clientInvoices 
-    : clientCampaigns.map(p => {
-        const total = p.grandTotal || p.totalCost || 0;
-        const paidAmt = getPaymentsForInvoice(p.id);
-        const remAmt = Math.max(0, total - paidAmt);
-        const pStatus = paidAmt === 0 ? 'unpaid' : (paidAmt >= total ? 'paid' : 'partial');
-        return {
-          id: p.id,
-          invoiceNumber: p.projectNumber || 'N/A',
-          date: p.startDate || '—',
-          service: p.projectName || '—',
-          selectedServices: [],
-          billType: 'credit', // Ad campaigns are always credit
-          total: total,
-          amount: total,
-          amountReceived: paidAmt,
-          remainingAmount: remAmt,
-          status: pStatus,
-          isCampaign: true,
-        };
+    ? formattedInvoices 
+    : ledgerMode === 'campaigns'
+    ? formattedCampaigns
+    : [...formattedInvoices, ...formattedCampaigns].sort((a, b) => {
+        const dateA = a.date || '';
+        const dateB = b.date || '';
+        return dateB.localeCompare(dateA);
       });
 
   const filteredInvoices = activeItems.filter(inv => {
@@ -138,8 +151,8 @@ export default function Ledger() {
   }, 0);
   const totalOutstanding = Math.max(0, totalQuoted - totalReceived);
 
-  const debitQuoted = ledgerMode === 'campaigns' ? 0 : clientInvoices.filter(inv => inv.billType === 'debit').reduce((sum, inv) => sum + (inv.total || inv.amount || 0), 0);
-  const debitReceived = ledgerMode === 'campaigns' ? 0 : clientInvoices.filter(inv => inv.billType === 'debit').reduce((sum, inv) => {
+  const debitQuoted = activeItems.filter(inv => inv.billType === 'debit').reduce((sum, inv) => sum + (inv.total || inv.amount || 0), 0);
+  const debitReceived = activeItems.filter(inv => inv.billType === 'debit').reduce((sum, inv) => {
     const invoiceTotal = inv.total || inv.amount || 0;
     const p = getPaymentsForInvoice(inv.id);
     if (p > 0) return sum + Math.min(p, invoiceTotal);
@@ -147,8 +160,8 @@ export default function Ledger() {
     if (inv.status === 'partial') return sum + (inv.amountReceived || 0);
     return sum;
   }, 0);
-  const creditQuoted = ledgerMode === 'campaigns' ? totalQuoted : clientInvoices.filter(inv => inv.billType === 'credit').reduce((sum, inv) => sum + (inv.total || inv.amount || 0), 0);
-  const creditReceived = ledgerMode === 'campaigns' ? totalReceived : clientInvoices.filter(inv => inv.billType === 'credit').reduce((sum, inv) => {
+  const creditQuoted = activeItems.filter(inv => inv.billType === 'credit').reduce((sum, inv) => sum + (inv.total || inv.amount || 0), 0);
+  const creditReceived = activeItems.filter(inv => inv.billType === 'credit').reduce((sum, inv) => {
     const invoiceTotal = inv.total || inv.amount || 0;
     const p = getPaymentsForInvoice(inv.id);
     if (p > 0) return sum + Math.min(p, invoiceTotal);
@@ -162,7 +175,7 @@ export default function Ledger() {
   const unpaidCount = activeItems.filter(inv => inv.status === 'unpaid').length;
   const collectionRate = totalQuoted > 0 ? ((totalReceived / totalQuoted) * 100).toFixed(1) : '0.0';
 
-  const isDebit = ledgerMode === 'campaigns' ? false : (activeFilter === 'debit' || (activeFilter !== 'credit' && debitQuoted > 0));
+  const isDebit = ledgerMode === 'campaigns' ? false : (activeFilter === 'debit' || (debitQuoted > 0 && creditQuoted === 0));
   const displayQuoted = isDebit ? debitQuoted : totalQuoted;
   const displayReceived = isDebit ? debitReceived : totalReceived;
   const displayOutstanding = isDebit ? Math.max(0, debitQuoted - debitReceived) : totalOutstanding;
@@ -218,7 +231,12 @@ export default function Ledger() {
       doc.text('Building India Digital', lm + cw / 2, y + 9, { align: 'center' });
       doc.setFontSize(8);
       doc.setFont(undefined, 'normal');
-      doc.text(ledgerMode === 'campaigns' ? 'Client Ad Campaigns Ledger Statement' : 'Client Ledger Statement', lm + cw / 2, y + 16, { align: 'center' });
+      const pdfTitle = ledgerMode === 'campaigns' 
+        ? 'Client Ad Campaigns Ledger Statement' 
+        : ledgerMode === 'combined'
+        ? 'Client Combined Ledger Statement (Invoices & Ad Campaigns)'
+        : 'Client Ledger Statement';
+      doc.text(pdfTitle, lm + cw / 2, y + 16, { align: 'center' });
       y += 30;
 
       // Client name + date
@@ -239,7 +257,7 @@ export default function Ledger() {
       const pdfOutstanding = isDebit ? Math.max(0, debitQuoted - debitReceived) : totalOutstanding;
 
       const boxes = [
-        { label: ledgerMode === 'campaigns' ? 'Total Budget' : (isDebit ? 'Total Billed' : 'Total Quoted'), value: `Rs. ${formatAmount(pdfQuoted)}`, fill: [79, 70, 229], text: [255, 255, 255] },
+        { label: ledgerMode === 'campaigns' ? 'Total Budget' : (isDebit ? 'Total Billed' : (ledgerMode === 'combined' ? 'Total Quoted / Budget' : 'Total Quoted')), value: `Rs. ${formatAmount(pdfQuoted)}`, fill: [79, 70, 229], text: [255, 255, 255] },
         { label: ledgerMode === 'campaigns' ? 'Total Paid' : (isDebit ? 'Total Paid' : 'Total Received'), value: `Rs. ${formatAmount(pdfReceived)}`, fill: [16, 185, 129], text: [255, 255, 255] },
         { label: ledgerMode === 'campaigns' ? 'Remaining Balance' : (isDebit ? 'Remaining Balance to Pay' : 'To Be Collected'), value: `Rs. ${formatAmount(pdfOutstanding)}`, fill: [244, 63, 94], text: [255, 255, 255] },
       ];
@@ -265,45 +283,64 @@ export default function Ledger() {
         const received = pmt > 0 ? Math.min(pmt, invoiceTotal) : inv.status === 'paid' ? invoiceTotal : (inv.amountReceived || 0);
         const remaining = Math.max(0, invoiceTotal - received);
         const services = inv.selectedServices?.map(s => s.name).join(', ') || inv.service || 'N/A';
-        return [
+        const row = [
           inv.invoiceNumber || 'N/A',
           inv.date || 'N/A',
-          services.length > 35 ? services.substring(0, 32) + '...' : services,
-          (inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1),
-          `Rs. ${formatAmount(invoiceTotal)}`,
-          `Rs. ${formatAmount(received)}`,
-          `Rs. ${formatAmount(remaining)}`,
+          services.length > 32 ? services.substring(0, 29) + '...' : services,
         ];
+        if (ledgerMode === 'combined') {
+          row.push(inv.isCampaign ? 'Ad' : 'Invoice');
+        }
+        row.push((inv.billType || 'none').charAt(0).toUpperCase() + (inv.billType || 'none').slice(1));
+        row.push(`Rs. ${formatAmount(invoiceTotal)}`);
+        row.push(`Rs. ${formatAmount(received)}`);
+        row.push(`Rs. ${formatAmount(remaining)}`);
+        return row;
       });
+
+      const tableHead = [[
+        ledgerMode === 'campaigns' ? 'Campaign #' : ledgerMode === 'combined' ? 'Ref #' : 'Invoice #', 
+        ledgerMode === 'campaigns' ? 'Start Date' : 'Date', 
+        ledgerMode === 'campaigns' ? 'Campaign Name' : ledgerMode === 'combined' ? 'Description' : 'Services', 
+        ...(ledgerMode === 'combined' ? ['Source'] : []),
+        'Type', 
+        ledgerMode === 'campaigns' ? 'Total Cost' : (isDebit ? 'Total Billed' : 'Quoted'), 
+        ledgerMode === 'campaigns' ? 'Amount Paid' : (isDebit ? 'Total Paid' : 'Received'), 
+        ledgerMode === 'campaigns' ? 'Remaining' : (isDebit ? 'Remaining Balance to Pay' : 'Remaining')
+      ]];
+
+      const columnStyles = ledgerMode === 'combined' ? {
+        0: { cellWidth: 26 },
+        1: { cellWidth: 18 },
+        2: { cellWidth: 44 },
+        3: { cellWidth: 16, halign: 'center' },
+        4: { cellWidth: 14, halign: 'center' },
+        5: { cellWidth: 21, halign: 'right' },
+        6: { cellWidth: 21, halign: 'right' },
+        7: { cellWidth: 21, halign: 'right' },
+      } : {
+        0: { cellWidth: 28 },
+        1: { cellWidth: 18 },
+        2: { cellWidth: 50 },
+        3: { cellWidth: 16, halign: 'center' },
+        4: { cellWidth: 22, halign: 'right' },
+        5: { cellWidth: 22, halign: 'right' },
+        6: { cellWidth: 22, halign: 'right' },
+      };
 
       autoTable(doc, {
         startY: y,
-        head: [[
-          ledgerMode === 'campaigns' ? 'Campaign #' : 'Invoice #', 
-          ledgerMode === 'campaigns' ? 'Start Date' : 'Date', 
-          ledgerMode === 'campaigns' ? 'Campaign Name' : 'Services', 
-          'Type', 
-          ledgerMode === 'campaigns' ? 'Total Cost' : (isDebit ? 'Total Billed' : 'Quoted'), 
-          ledgerMode === 'campaigns' ? 'Amount Paid' : (isDebit ? 'Total Paid' : 'Received'), 
-          ledgerMode === 'campaigns' ? 'Remaining' : (isDebit ? 'Remaining Balance to Pay' : 'Remaining')
-        ]],
+        head: tableHead,
         body: tableData,
         theme: 'striped',
         headStyles: { fillColor: [79, 70, 229], textColor: [255, 255, 255], fontSize: 7, fontStyle: 'bold', halign: 'center', cellPadding: 3 },
         bodyStyles: { fontSize: 7, cellPadding: 2.5, valign: 'middle' },
         alternateRowStyles: { fillColor: [248, 248, 252] },
-        columnStyles: {
-          0: { cellWidth: 28 },
-          1: { cellWidth: 18 },
-          2: { cellWidth: 50 },
-          3: { cellWidth: 16, halign: 'center' },
-          4: { cellWidth: 22, halign: 'right' },
-          5: { cellWidth: 22, halign: 'right' },
-          6: { cellWidth: 22, halign: 'right' },
-        },
+        columnStyles: columnStyles,
         margin: { left: lm, right: rm },
         didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 3) {
+          const typeIndex = ledgerMode === 'combined' ? 4 : 3;
+          if (data.section === 'body' && data.column.index === typeIndex) {
             const inv = filteredInvoices[data.row.index];
             data.cell.styles.textColor = inv?.billType === 'debit' ? [200, 0, 0] : inv?.billType === 'credit' ? [0, 140, 60] : [100, 100, 100];
             data.cell.styles.fontStyle = 'bold';
@@ -317,7 +354,7 @@ export default function Ledger() {
         },
       });
 
-      const filenamePrefix = ledgerMode === 'campaigns' ? 'AdCampaignsLedger' : 'Ledger';
+      const filenamePrefix = ledgerMode === 'campaigns' ? 'AdCampaignsLedger' : ledgerMode === 'combined' ? 'CombinedLedger' : 'Ledger';
       doc.save(`${filenamePrefix}_${selectedClient.name.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`);
       showToast(`PDF downloaded for ${selectedClient.name}`, 'success');
     } catch (err) {
@@ -327,9 +364,9 @@ export default function Ledger() {
   };
 
   const filterButtons = [
-    { key: 'all', label: 'All', count: clientInvoices.length },
-    { key: 'debit', label: 'Debit', count: clientInvoices.filter(i => i.billType === 'debit').length },
-    { key: 'credit', label: 'Credit', count: clientInvoices.filter(i => i.billType === 'credit').length },
+    { key: 'all', label: 'All', count: activeItems.length },
+    { key: 'debit', label: 'Debit', count: activeItems.filter(i => i.billType === 'debit').length },
+    { key: 'credit', label: 'Credit', count: activeItems.filter(i => i.billType === 'credit').length },
     { key: 'paid', label: 'Paid', count: paidCount },
     { key: 'partial', label: 'Partial', count: partialCount },
     { key: 'unpaid', label: 'Unpaid', count: unpaidCount },
@@ -415,10 +452,10 @@ export default function Ledger() {
 
         {/* Ledger Mode Selector */}
         {selectedClientId && (
-          <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-100 w-fit">
+          <div className="flex bg-white p-1 rounded-xl shadow-sm border border-slate-100 w-fit flex-wrap gap-1">
             <button
               onClick={() => { setLedgerMode('invoices'); setActiveFilter('all'); }}
-              className={`px-5 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
                 ledgerMode === 'invoices'
                   ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
                   : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
@@ -428,13 +465,23 @@ export default function Ledger() {
             </button>
             <button
               onClick={() => { setLedgerMode('campaigns'); setActiveFilter('all'); }}
-              className={`px-5 py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
                 ledgerMode === 'campaigns'
                   ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
                   : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
               }`}
             >
               Ad Campaigns Ledger
+            </button>
+            <button
+              onClick={() => { setLedgerMode('combined'); setActiveFilter('all'); }}
+              className={`px-4 sm:px-5 py-2 sm:py-2.5 rounded-lg font-bold text-xs sm:text-sm transition-all duration-200 ${
+                ledgerMode === 'combined'
+                  ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-md'
+                  : 'text-slate-600 hover:text-slate-800 hover:bg-slate-50'
+              }`}
+            >
+              Both (Invoices + Ads)
             </button>
           </div>
         )}
@@ -474,6 +521,8 @@ export default function Ledger() {
                   <span className="text-sm font-bold text-white">
                     {ledgerMode === 'campaigns' 
                       ? `${clientCampaigns.length} Campaign${clientCampaigns.length !== 1 ? 's' : ''}`
+                      : ledgerMode === 'combined'
+                      ? `${clientInvoices.length} Inv + ${clientCampaigns.length} Ad (${activeItems.length} Total)`
                       : `${clientInvoices.length} Invoice${clientInvoices.length !== 1 ? 's' : ''}`
                     }
                   </span>
@@ -485,7 +534,7 @@ export default function Ledger() {
             <div className={`grid grid-cols-2 ${isDebit ? 'lg:grid-cols-3' : 'lg:grid-cols-4'} gap-3`}>
               {[
                 { 
-                  label: isDebit ? 'Total Billed' : 'Total Quoted', 
+                  label: isDebit ? 'Total Billed' : (ledgerMode === 'combined' ? 'Total Quoted / Budget' : (ledgerMode === 'campaigns' ? 'Total Budget' : 'Total Quoted')), 
                   value: `₹${formatAmount(displayQuoted)}`, 
                   color: 'blue', 
                   icon: <FileText className="w-4 h-4 text-blue-600" />, 
@@ -539,7 +588,7 @@ export default function Ledger() {
                       <div className="p-2 bg-red-50 rounded-xl"><TrendingDown className="w-4 h-4 text-red-500" /></div>
                       <div>
                         <p className="text-sm font-bold text-slate-700">Debit Bills</p>
-                        <p className="text-xs text-slate-400">{clientInvoices.filter(i => i.billType === 'debit').length} invoices</p>
+                        <p className="text-xs text-slate-400">{activeItems.filter(i => i.billType === 'debit').length} {ledgerMode === 'combined' ? 'records' : 'invoices'}</p>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold bg-red-50 text-red-600 border border-red-200 px-2 py-0.5 rounded-full">PAYABLE</span>
@@ -557,7 +606,7 @@ export default function Ledger() {
                       <div className="p-2 bg-green-50 rounded-xl"><TrendingUp className="w-4 h-4 text-green-600" /></div>
                       <div>
                         <p className="text-sm font-bold text-slate-700">Credit Bills</p>
-                        <p className="text-xs text-slate-400">{clientInvoices.filter(i => i.billType === 'credit').length} invoices</p>
+                        <p className="text-xs text-slate-400">{activeItems.filter(i => i.billType === 'credit').length} {ledgerMode === 'combined' ? 'records' : 'invoices'}</p>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold bg-green-50 text-green-600 border border-green-200 px-2 py-0.5 rounded-full">RECEIVABLE</span>
@@ -594,7 +643,7 @@ export default function Ledger() {
                   </div>
                   <p className={`text-3xl font-black text-${s.color}-600`}>{s.count}</p>
                   <p className="text-xs text-slate-400 mt-1 font-semibold">
-                    {ledgerMode === 'campaigns' ? 'Campaigns' : 'Invoices'}
+                    {ledgerMode === 'campaigns' ? 'Campaigns' : ledgerMode === 'combined' ? 'Total Records' : 'Invoices'}
                   </p>
                 </div>
               ))}
@@ -627,7 +676,11 @@ export default function Ledger() {
                   <div className="flex items-center gap-2.5">
                     <div className="p-2 bg-indigo-50 rounded-xl"><Receipt className="w-4 h-4 text-indigo-600" /></div>
                     <h3 className="text-base font-bold text-slate-800">
-                      {ledgerMode === 'campaigns' ? 'Ad Campaign History' : 'Invoice History'}
+                      {ledgerMode === 'campaigns' 
+                        ? 'Ad Campaign History' 
+                        : ledgerMode === 'combined' 
+                        ? 'Combined History (Invoices & Ads)' 
+                        : 'Invoice History'}
                     </h3>
                     <span className="text-xs text-slate-400 font-normal">({filteredInvoices.length} shown)</span>
                   </div>
@@ -656,8 +709,12 @@ export default function Ledger() {
                   <div className="w-14 h-14 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
                     <Receipt className="w-7 h-7 text-slate-300" />
                   </div>
-                  <p className="text-sm font-bold text-slate-500">No invoices found</p>
-                  <p className="text-xs text-slate-400 mt-1">{activeFilter !== 'all' ? 'Try a different filter.' : 'No invoices for this client yet.'}</p>
+                  <p className="text-sm font-bold text-slate-500">
+                    No {ledgerMode === 'campaigns' ? 'campaigns' : ledgerMode === 'combined' ? 'records' : 'invoices'} found
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    {activeFilter !== 'all' ? 'Try a different filter.' : `No ${ledgerMode === 'campaigns' ? 'campaigns' : ledgerMode === 'combined' ? 'invoices or campaigns' : 'invoices'} for this client yet.`}
+                  </p>
                 </div>
               ) : (
                 <>
@@ -667,9 +724,10 @@ export default function Ledger() {
                       <thead>
                         <tr className="bg-slate-50 border-b border-slate-100">
                           {[
-                            ledgerMode === 'campaigns' ? 'Campaign #' : 'Invoice #', 
+                            ledgerMode === 'campaigns' ? 'Campaign #' : ledgerMode === 'combined' ? 'Ref / #' : 'Invoice #', 
                             ledgerMode === 'campaigns' ? 'Start Date' : 'Date', 
-                            ledgerMode === 'campaigns' ? 'Campaign Name' : 'Services', 
+                            ledgerMode === 'campaigns' ? 'Campaign Name' : ledgerMode === 'combined' ? 'Description / Services' : 'Services', 
+                            ...(ledgerMode === 'combined' ? ['Source'] : []),
                             'Type', 
                             ledgerMode === 'campaigns' ? 'Total Cost' : (isDebit ? 'Total Billed' : 'Quoted'), 
                             ledgerMode === 'campaigns' ? 'Amount Paid' : (isDebit ? 'Total Paid' : 'Received'), 
@@ -693,7 +751,9 @@ export default function Ledger() {
                             <tr key={invoice.id} className={`border-b border-slate-50 hover:bg-indigo-50/30 transition-colors ${idx % 2 === 0 ? '' : 'bg-slate-50/30'}`}>
                               <td className="px-4 py-3.5">
                                 <div className="flex items-center gap-2">
-                                  <div className="bg-indigo-100 p-1.5 rounded-lg"><FileText className="w-3 h-3 text-indigo-600" /></div>
+                                  <div className={`p-1.5 rounded-lg ${invoice.isCampaign ? 'bg-purple-100' : 'bg-indigo-100'}`}>
+                                    {invoice.isCampaign ? <TrendingUp className="w-3 h-3 text-purple-600" /> : <FileText className="w-3 h-3 text-indigo-600" />}
+                                  </div>
                                   <span className="text-xs font-bold text-slate-800 whitespace-nowrap">{invoice.invoiceNumber}</span>
                                 </div>
                               </td>
@@ -706,6 +766,17 @@ export default function Ledger() {
                                   </div>
                                 ) : <span className="text-xs text-slate-400">{invoice.service || '—'}</span>}
                               </td>
+                              {ledgerMode === 'combined' && (
+                                <td className="px-4 py-3.5 whitespace-nowrap">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                    invoice.isCampaign 
+                                      ? 'bg-purple-50 text-purple-700 border-purple-200' 
+                                      : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                                  }`}>
+                                    {invoice.isCampaign ? 'Ad Campaign' : 'Invoice'}
+                                  </span>
+                                </td>
+                              )}
                               <td className="px-4 py-3.5"><Badge styles={billS} label={(invoice.billType || 'none').charAt(0).toUpperCase() + (invoice.billType || 'none').slice(1)} /></td>
                               <td className="px-4 py-3.5"><span className="text-sm font-black text-slate-800 whitespace-nowrap">₹{formatAmount(invoiceTotal)}</span></td>
                               <td className="px-4 py-3.5"><span className="text-xs font-bold text-emerald-600 whitespace-nowrap">₹{formatAmount(received)}</span></td>
@@ -732,9 +803,22 @@ export default function Ledger() {
                         <div key={invoice.id} className="p-4 hover:bg-indigo-50/20 transition-colors">
                           <div className="flex items-start justify-between gap-2 mb-3">
                             <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                              <div className="bg-indigo-100 p-1.5 rounded-lg flex-shrink-0"><FileText className="w-3.5 h-3.5 text-indigo-600" /></div>
+                              <div className={`p-1.5 rounded-lg flex-shrink-0 ${invoice.isCampaign ? 'bg-purple-100 text-purple-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                {invoice.isCampaign ? <TrendingUp className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                              </div>
                               <div className="min-w-0">
-                                <p className="text-sm font-bold text-slate-800 truncate">{invoice.invoiceNumber}</p>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <p className="text-sm font-bold text-slate-800 truncate">{invoice.invoiceNumber}</p>
+                                  {ledgerMode === 'combined' && (
+                                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
+                                      invoice.isCampaign 
+                                        ? 'bg-purple-100 text-purple-700' 
+                                        : 'bg-indigo-100 text-indigo-700'
+                                    }`}>
+                                      {invoice.isCampaign ? 'Ad' : 'Invoice'}
+                                    </span>
+                                  )}
+                                </div>
                                 <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5"><Calendar className="w-3 h-3" />{invoice.date || '—'}</p>
                               </div>
                             </div>
@@ -752,19 +836,19 @@ export default function Ledger() {
                           <div className="grid grid-cols-3 gap-2">
                             <div className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 text-center">
                               <p className="text-[9px] text-slate-400 font-semibold mb-0.5">
-                                {ledgerMode === 'campaigns' ? 'TOTAL BUDGET' : (invoice.billType === 'debit' ? 'TOTAL BILLED' : 'QUOTED')}
+                                {invoice.isCampaign ? 'TOTAL BUDGET' : (invoice.billType === 'debit' ? 'TOTAL BILLED' : 'QUOTED')}
                               </p>
                               <p className="text-sm font-black text-slate-800">₹{formatAmount(invoiceTotal)}</p>
                             </div>
                             <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 text-center">
                               <p className="text-[9px] text-emerald-500 font-semibold mb-0.5">
-                                {ledgerMode === 'campaigns' ? 'TOTAL PAID' : (invoice.billType === 'debit' ? 'TOTAL PAID' : 'RECEIVED')}
+                                {invoice.isCampaign ? 'TOTAL PAID' : (invoice.billType === 'debit' ? 'TOTAL PAID' : 'RECEIVED')}
                               </p>
                               <p className="text-sm font-black text-emerald-600">₹{formatAmount(received)}</p>
                             </div>
                             <div className={`rounded-xl p-2.5 text-center border ${outstanding > 0 ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100'}`}>
                               <p className={`text-[9px] font-semibold mb-0.5 ${outstanding > 0 ? 'text-rose-500' : 'text-slate-400'}`}>
-                                {ledgerMode === 'campaigns' ? 'REMAINING BALANCE' : (invoice.billType === 'debit' ? 'REMAINING BALANCE' : 'OUTSTANDING')}
+                                {invoice.isCampaign ? 'REMAINING BALANCE' : (invoice.billType === 'debit' ? 'REMAINING BALANCE' : 'OUTSTANDING')}
                               </p>
                               <p className={`text-sm font-black ${outstanding > 0 ? 'text-rose-600' : 'text-slate-400'}`}>{outstanding > 0 ? `₹${formatAmount(outstanding)}` : '—'}</p>
                             </div>
@@ -789,14 +873,20 @@ export default function Ledger() {
 
               {filteredInvoices.length > 0 && (
                 <div className="px-4 sm:px-5 py-3.5 border-t border-slate-100 bg-gradient-to-r from-indigo-50 to-purple-50 flex flex-wrap items-center justify-between gap-2">
-                  <span className="text-xs text-slate-500 font-medium">{filteredInvoices.length} {ledgerMode === 'campaigns' ? 'campaign' : 'invoice'}{filteredInvoices.length !== 1 ? 's' : ''} shown</span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    {filteredInvoices.length} {ledgerMode === 'campaigns' ? 'campaign' : ledgerMode === 'combined' ? 'record' : 'invoice'}{filteredInvoices.length !== 1 ? 's' : ''} shown
+                  </span>
                   <div className="flex gap-4 text-xs">
-                    <span className="text-slate-500">{ledgerMode === 'campaigns' ? 'Total Budget' : (isDebit ? 'Total Billed' : 'Total Quoted')}: <span className="font-black text-slate-800">₹{formatAmount(filteredInvoices.reduce((s, i) => s + (i.total || i.amount || 0), 0))}</span></span>
-                    <span className="text-slate-500">{ledgerMode === 'campaigns' ? 'Total Paid' : (isDebit ? 'Total Paid' : 'Total Received')}: <span className="font-black text-emerald-600">₹{formatAmount(filteredInvoices.reduce((s, i) => {
-                      const total = i.total || i.amount || 0;
-                      const pmts = getPaymentsForInvoice(i.id);
-                      return s + (pmts > 0 ? Math.min(pmts, total) : (i.status === 'paid' ? total : (i.amountReceived || 0)));
-                    }, 0))}</span></span>
+                    <span className="text-slate-500">
+                      {ledgerMode === 'campaigns' ? 'Total Budget' : (isDebit ? 'Total Billed' : (ledgerMode === 'combined' ? 'Total Quoted / Budget' : 'Total Quoted'))}: <span className="font-black text-slate-800">₹{formatAmount(filteredInvoices.reduce((s, i) => s + (i.total || i.amount || 0), 0))}</span>
+                    </span>
+                    <span className="text-slate-500">
+                      {ledgerMode === 'campaigns' ? 'Total Paid' : (isDebit ? 'Total Paid' : 'Total Received')}: <span className="font-black text-emerald-600">₹{formatAmount(filteredInvoices.reduce((s, i) => {
+                        const total = i.total || i.amount || 0;
+                        const pmts = getPaymentsForInvoice(i.id);
+                        return s + (pmts > 0 ? Math.min(pmts, total) : (i.status === 'paid' ? total : (i.amountReceived || 0)));
+                      }, 0))}</span>
+                    </span>
                   </div>
                 </div>
               )}
